@@ -8,24 +8,35 @@ wird mit Pandoc ein sauberer HTML- oder PDF-Bericht für den Kunden.
 - Braucht **keine Installation, keine Module und kein Internet**.
 - **Liest nur** und ändert nichts am System.
 
-## Schnellstart
+## Schnellstart mit Inventur.exe
 
-1. Repo als ZIP herunterladen (*Code → Download ZIP*) und auf den Zielrechner kopieren, z. B. per USB-Stick.
-2. ZIP entpacken und **`Start-Inventur.cmd`** doppelklicken.
-3. Die Abfrage nach Administratorrechten bestätigen.
-4. Kundennamen eingeben, oder mit Enter ohne Kundennamen fortfahren.
-5. Der Report liegt danach im selben Ordner als `Inventur_<RECHNER>_<Datum>.md`.
+1. `Inventur.exe` aus den [Releases](../../releases) herunterladen und auf den Zielrechner
+   kopieren, z. B. per USB-Stick.
+2. Doppelklicken und die Abfrage nach Administratorrechten bestätigen.
+3. **Kunde** und **Techniker** eintragen. Der Techniker wird für den nächsten Start gemerkt.
+4. Bei Bedarf Zielordner und Optionen anpassen, dann *Inventur starten*.
+5. Nach etwa einer Minute ist der Report fertig. *Report öffnen* bzw. *Ordner öffnen* führen direkt hin.
 
-> Warnt Windows SmartScreen beim Start, weil die Datei aus dem Internet stammt:
-> *Weitere Informationen → Trotzdem ausführen*, oder vorher in den Dateieigenschaften
-> der ZIP-Datei *Zulassen* anhaken.
+Standard-Zielordner ist der Ordner der Exe, also z. B. der USB-Stick. Ist der schreibgeschützt,
+wird der Desktop vorgeschlagen. Der Dateiname ist `Inventur_<RECHNER>_<Datum>.md`.
+
+> Die Exe ist **nicht digital signiert**. Windows zeigt deshalb bei der UAC-Abfrage
+> „Unbekannter Herausgeber“, und SmartScreen kann beim ersten Start warnen
+> (*Weitere Informationen → Trotzdem ausführen*). Mit einem Code-Signing-Zertifikat
+> verschwinden beide Hinweise.
+
+**Ohne Exe:** Repo als ZIP herunterladen und `Start-Inventur.cmd` doppelklicken. Der Starter
+fragt im Konsolenfenster nach dem Kundennamen.
 
 ## Dateien
 
 | Datei | Zweck |
 |---|---|
-| `Invoke-Inventur.ps1` | Das Inventur-Skript |
-| `Start-Inventur.cmd` | Starter per Doppelklick: holt Adminrechte, fragt nach dem Kundennamen und startet das Skript |
+| `Invoke-Inventur.ps1` | Das Inventur-Skript, steckt auch eingebettet in der Exe |
+| `src/InventurLauncher.cs` | Quellcode der Exe (Oberfläche, startet das eingebettete Skript) |
+| `src/app.manifest` | Manifest der Exe: fordert Adminrechte an |
+| `build.ps1` | Baut `dist\Inventur.exe` |
+| `Start-Inventur.cmd` | Alternative ohne Exe: holt Adminrechte, fragt nach dem Kundennamen und startet das Skript |
 | `report.css` | Layout für den HTML/PDF-Report (A4, Seitenzahlen, Tabellen) |
 
 ## Was erfasst wird
@@ -44,15 +55,17 @@ und das Skript läuft weiter.
 
 ## Aufruf mit Parametern
 
-Für alle Optionen das Skript direkt in einer PowerShell aufrufen, die als Administrator läuft:
+Ohne Oberfläche, z. B. für eigene Automatisierung, lässt sich das Skript direkt in einer
+PowerShell aufrufen, die als Administrator läuft:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster GmbH"
+powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster GmbH" -Techniker "Max Mustermann"
 ```
 
 | Parameter | Bedeutung |
 |---|---|
 | `-Kunde "Name"` | Kundenname im Report-Kopf |
+| `-Techniker "Name"` | Name des Technikers im Report-Kopf |
 | `-OutputPath <Datei oder Ordner>` | Ziel des Reports (Standard: Ordner des Skripts) |
 | `-IncludeProductKey` | OEM-Schlüssel aus der Firmware vollständig ausgeben (Standard: nur die letzten 5 Zeichen) |
 | `-NoStoreApps` | Store-Apps weglassen |
@@ -75,6 +88,25 @@ pandoc Inventur_PC01_2026-11-02.md -s --css report.css --pdf-engine=weasyprint -
 Ohne WeasyPrint: die HTML-Datei im Browser öffnen und über *Drucken → Als PDF speichern*
 ausgeben. `report.css` enthält die passenden Druckregeln.
 
+## Exe bauen
+
+Auf jedem Windows-Rechner, ohne Visual Studio oder .NET SDK:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+`build.ps1` nutzt den in Windows enthaltenen C#-Compiler des .NET Framework 4.x und bettet
+`Invoke-Inventur.ps1` in die Exe ein. Änderungen am Skript landen also erst nach einem neuen
+Build in der Exe.
+
+Den Rest erledigt GitHub Actions (`.github/workflows/build.yml`):
+
+- Jeder Push auf `main` baut die Exe auf einem Windows-Runner, führt das Skript testweise aus
+  und stellt Exe und Test-Report unter *Actions* als Download bereit.
+- Ein Tag `v*` (z. B. `git tag v1.1.0 && git push origin v1.1.0`) legt zusätzlich ein Release
+  mit der Exe an.
+
 ## Datenschutz
 
 Der Report enthält Seriennummern, Benutzernamen und den Entra-Mandanten. Er ist wie andere
@@ -83,5 +115,5 @@ erzeugte Reports (`Inventur_*`) sind per `.gitignore` vom Repo ausgeschlossen.
 
 ## Status
 
-Version 1.0.0. Noch nicht auf echten Rechnern getestet. Rückmeldungen von Testläufen unter
+Version 1.1.0. Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
 Windows 10 und 11 bitte als Issue.
