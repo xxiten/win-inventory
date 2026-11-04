@@ -105,8 +105,9 @@ Den Rest erledigt GitHub Actions (`.github/workflows/build.yml`):
 
 - Jeder Push auf `main` baut die Exe auf einem Windows-Runner, führt das Skript testweise aus
   und stellt Exe und Test-Report unter *Actions* als Download bereit.
-- Ein Tag `v*` (z. B. `git tag v0.8.0 && git push origin v0.8.0`) legt zusätzlich ein Release
-  mit der Exe an.
+- Ein Release mit der Exe entsteht über *Actions → Build → Run workflow*: im Feld
+  *Release anlegen* die Version eintragen, z. B. `0.8.0`. Sie muss zu `$ScriptVersion` in
+  `Invoke-Inventur.ps1` passen, sonst bricht der Lauf ab. Ein gepushter Tag `v*` funktioniert ebenso.
 
 ## Datenschutz
 

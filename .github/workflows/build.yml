@@ -6,6 +6,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Release anlegen, z. B. 0.8.0 (leer = nur bauen)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -39,8 +44,16 @@ jobs:
             ${{ runner.temp }}/Inventur_CI.md
 
       - name: Release anlegen
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release != ''
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create $env:GITHUB_REF_NAME dist/Inventur.exe --title $env:GITHUB_REF_NAME --generate-notes
+          RELEASE_INPUT: ${{ inputs.release }}
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $tag = $env:GITHUB_REF_NAME }
+          else { $tag = 'v' + $env:RELEASE_INPUT.Trim().TrimStart('v') }
+          $line = Select-String -Path .\Invoke-Inventur.ps1 -Pattern "^\`$ScriptVersion = '(.+)'" | Select-Object -First 1
+          $scriptVersion = $line.Matches[0].Groups[1].Value
+          if ($tag -ne "v$scriptVersion") { throw "Tag $tag passt nicht zur Skriptversion $scriptVersion." }
+          gh release create $tag dist/Inventur.exe --target $env:GITHUB_SHA --title $tag --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw 'Release fehlgeschlagen.' }
