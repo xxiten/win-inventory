@@ -1,8 +1,7 @@
 # win-inventory
 
 Inventur für Windows-10/11-Rechner per PowerShell. Das Skript erfasst Hardware, Sicherheit,
-Benutzer, Lizenz und installierte Software und schreibt alles in einen Markdown-Report. Daraus
-wird mit Pandoc ein sauberer HTML- oder PDF-Bericht für den Kunden.
+Benutzer, Lizenz und installierte Software und schreibt alles in einen sauberen Markdown-Report.
 
 - Läuft mit **Windows PowerShell 5.1**, das auf jedem Windows 10/11 vorinstalliert ist.
 - Braucht **keine Installation, keine Module und kein Internet**.
@@ -36,9 +35,9 @@ fragt im Konsolenfenster nach dem Kundennamen.
 | `Invoke-Inventur.ps1` | Das Inventur-Skript, steckt auch eingebettet in der Exe |
 | `src/InventurLauncher.cs` | Quellcode der Exe (Oberfläche, startet das eingebettete Skript) |
 | `src/app.manifest` | Manifest der Exe: fordert Adminrechte an |
+| `src/app.ico` | Programmsymbol der Exe (16–256 px) |
 | `build.ps1` | Baut `dist\Inventur.exe` |
 | `Start-Inventur.cmd` | Alternative ohne Exe: holt Adminrechte, fragt nach dem Kundennamen und startet das Skript |
-| `report.css` | Layout für den HTML/PDF-Report (A4, Seitenzahlen, Tabellen) |
 
 ## Was erfasst wird
 
@@ -74,21 +73,6 @@ powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster Gm
 Ohne Administratorrechte läuft das Skript ebenfalls durch. Dann fehlen aber u. a. BitLocker,
 TPM, Secure Boot und die Store-Apps anderer Benutzer. Der Report weist oben darauf hin.
 
-## Report zu HTML oder PDF
-
-Mit [Pandoc](https://pandoc.org/). Titel, Kunde und Datum übernimmt Pandoc aus dem Kopf des Reports.
-
-```bash
-# HTML: eine eigenständige Datei, CSS eingebettet
-pandoc Inventur_PC01_2026-11-02.md -s --embed-resources --css report.css -o Inventur_PC01.html
-
-# PDF über WeasyPrint: nutzt dasselbe CSS und bricht breite Tabellen sauber um
-pandoc Inventur_PC01_2026-11-02.md -s --css report.css --pdf-engine=weasyprint -o Inventur_PC01.pdf
-```
-
-Ohne WeasyPrint: die HTML-Datei im Browser öffnen und über *Drucken → Als PDF speichern*
-ausgeben. `report.css` enthält die passenden Druckregeln.
-
 ## Exe bauen
 
 Auf jedem Windows-Rechner, ohne Visual Studio oder .NET SDK:
@@ -117,5 +101,11 @@ erzeugte Reports (`Inventur_*`) sind per `.gitignore` vom Repo ausgeschlossen.
 
 ## Status
 
-Version 0.8.2. Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
+Aktuelle Version siehe [Releases](https://github.com/xxiten/win-inventory/releases). Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
 Windows 10 und 11 bitte als Issue.
+
+## Lizenz
+
+MIT, siehe [LICENSE](LICENSE). Das Programmsymbol `src/app.ico` stammt aus
+[Fluent UI Emoji](https://github.com/microsoft/fluentui-emoji) von Microsoft und steht ebenfalls
+unter MIT-Lizenz, siehe [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

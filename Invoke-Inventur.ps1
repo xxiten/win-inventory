@@ -4,8 +4,7 @@
 
 .DESCRIPTION
     Sammelt Hardware, Betriebssystem, Sicherheit, Peripherie, Benutzer/Lizenz und
-    installierte Software (klassisch + Store) und schreibt einen Markdown-Report,
-    der sich mit Pandoc zu HTML oder PDF weiterverarbeiten lässt.
+    installierte Software (klassisch + Store) und schreibt einen Markdown-Report.
 
     Läuft mit Windows PowerShell 5.1 (Bordmittel), keine zusätzlichen Module.
     Als Administrator ausfuehren - sonst fehlen u. a. BitLocker, TPM, Secure Boot
@@ -42,7 +41,7 @@ param(
 
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '0.8.2'
+$ScriptVersion = '0.8.3'
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -165,7 +164,7 @@ if (Test-Path -LiteralPath $OutputPath -PathType Container) {
 Write-Host "Inventur von $env:COMPUTERNAME ..."
 
 # ---------------------------------------------------------------------------
-# Kopf (YAML-Frontmatter für Pandoc)
+# Kopf (YAML-Frontmatter mit Titel, Kunde, Techniker, Datum)
 # ---------------------------------------------------------------------------
 
 $title = "Inventur $env:COMPUTERNAME"

@@ -17,13 +17,12 @@ using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("Netixx Windows Inventory")]
+[assembly: AssemblyTitle(WinInventory.MainForm.Product)]
 [assembly: AssemblyDescription("Inventur eines Windows-10/11-Rechners als Markdown-Report")]
-[assembly: AssemblyCompany("Netixx IT Solutions")]
-[assembly: AssemblyProduct("Netixx Windows Inventory")]
-[assembly: AssemblyCopyright("© 2026 Netixx IT Solutions")]
-[assembly: AssemblyVersion("0.8.2.0")]
-[assembly: AssemblyFileVersion("0.8.2.0")]
+[assembly: AssemblyCompany(WinInventory.MainForm.Company)]
+[assembly: AssemblyProduct(WinInventory.MainForm.Product)]
+[assembly: AssemblyCopyright(WinInventory.MainForm.Copyright + " · " + WinInventory.MainForm.IconCredit)]
+// AssemblyVersion erzeugt build.ps1 aus $ScriptVersion in Invoke-Inventur.ps1.
 
 namespace WinInventory
 {
@@ -42,6 +41,11 @@ namespace WinInventory
     {
         const string ResourceName = "Invoke-Inventur.ps1";
         const string SettingsKey = @"Software\win-inventory";
+        internal const string Product = "Netixx Windows Inventory";
+        internal const string Company = "Netixx GmbH";
+        internal const string Copyright = "© 2026 " + Company;
+        // Herkunft von app.ico, Details in THIRD-PARTY-NOTICES.md
+        internal const string IconCredit = "Icon: Fluent Emoji © Microsoft Corporation (MIT)";
         const string Website = "www.netixx.it";
 
         TextBox txtKunde, txtTechniker, txtOrdner, txtLog;
@@ -62,14 +66,19 @@ namespace WinInventory
             SuspendLayout();
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            Text = "Netixx Windows Inventory – " + Environment.MachineName;
+            Text = Product + " – " + Environment.MachineName;
             Font = SystemFonts.MessageBoxFont;
+            // Datei-Icon der Exe kommt per /win32icon; das Fenster braucht es als Ressource,
+            // damit Titel- und Taskleiste jeweils die passende Groesse bekommen.
+            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("app.ico"))
+            {
+                Icon = new Icon(s);
+            }
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(620, 520);
             MinimumSize = new Size(520, 440);
             BuildLayout();
-            ResumeLayout(false);
-            PerformLayout();
+            ResumeLayout();
 
             txtTechniker.Text = LoadSetting("Techniker");
             txtOrdner.Text = DefaultFolder();
@@ -187,7 +196,7 @@ namespace WinInventory
 
             Label lblVersion = new Label();
             lblVersion.Text = "Version " + Assembly.GetExecutingAssembly().GetName().Version.ToString(3) +
-                              " · © 2026 Netixx IT Solutions";
+                              " · " + Copyright;
             lblVersion.AutoSize = true;
             lblVersion.Anchor = AnchorStyles.Left;
             lblVersion.ForeColor = SystemColors.GrayText;
@@ -375,8 +384,7 @@ namespace WinInventory
         {
             // Ueber explorer.exe, damit der Browser nicht mit den Adminrechten
             // dieses Prozesses startet.
-            try { Process.Start("explorer.exe", "https://" + Website); }
-            catch (Exception) { }
+            Process.Start("explorer.exe", "https://" + Website);
         }
 
         void OnFormClosing(object sender, FormClosingEventArgs e)
