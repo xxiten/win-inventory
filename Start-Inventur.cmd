@@ -1,7 +1,7 @@
 @echo off
 rem Startet die Inventur mit Administratorrechten (UAC-Abfrage) und umgeht die
 rem Execution Policy nur fuer diesen einen Aufruf.
-rem Fragt nach dem Kundennamen erst nach der Rechteerhoehung, damit nichts
+rem Fragt nach Kunde und Station erst nach der Rechteerhoehung, damit nichts
 rem durch den Neustart verloren geht.
 setlocal
 set "SCRIPT=%~dp0Invoke-Inventur.ps1"
@@ -25,23 +25,32 @@ set "PSModulePath=%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules"
 echo Inventur von %COMPUTERNAME%
 echo.
 set "KUNDE="
+set "STATION="
 set /p "KUNDE=Kundenname (Enter = ohne): "
+set /p "STATION=Station, z. B. PC Sonja oder Empfang 1 (Enter = ohne): "
 
 setlocal EnableDelayedExpansion
-rem Anfuehrungszeichen entfernen, sonst bricht der Aufruf
-if defined KUNDE set "KUNDE=!KUNDE:"=!"
-:trim
-rem Ein Backslash am Ende wuerde das schliessende Anfuehrungszeichen entwerten
-if defined KUNDE if "!KUNDE:~-1!"=="\" (
-    set "KUNDE=!KUNDE:~0,-1!"
-    goto trim
-)
+call :bereinigen KUNDE
+call :bereinigen STATION
+set "ARGS="
+if defined KUNDE set "ARGS=!ARGS! -Kunde "!KUNDE!""
+if defined STATION set "ARGS=!ARGS! -Station "!STATION!""
 
 echo.
-if defined KUNDE (
-    "%PS%" -NoProfile -ExecutionPolicy Bypass -File "!SCRIPT!" -Kunde "!KUNDE!"
-) else (
-    "%PS%" -NoProfile -ExecutionPolicy Bypass -File "!SCRIPT!"
-)
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "!SCRIPT!" !ARGS!
 echo.
 pause
+exit /b
+
+:bereinigen
+rem Anfuehrungszeichen entfernen, sonst bricht der Aufruf. Ein Backslash am Ende
+rem wuerde das schliessende Anfuehrungszeichen entwerten.
+if not defined %1 exit /b
+set "WERT=!%1:"=!"
+:bereinigen_ende
+if defined WERT if "!WERT:~-1!"=="\" (
+    set "WERT=!WERT:~0,-1!"
+    goto bereinigen_ende
+)
+set "%1=!WERT!"
+exit /b

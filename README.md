@@ -13,7 +13,8 @@ Benutzer, Lizenz und installierte Software und schreibt alles in einen sauberen 
    (immer die neueste Version, ältere unter [Releases](https://github.com/xxiten/win-inventory/releases))
    und auf den Zielrechner kopieren, z. B. per USB-Stick.
 2. Doppelklicken und die Abfrage nach Administratorrechten bestätigen.
-3. **Kunde** und **Techniker** eintragen. Der Techniker wird für den nächsten Start gemerkt.
+3. **Kunde**, bei Bedarf **Station** (z. B. „PC Sonja“ oder „Empfang 1“) und **Techniker** eintragen.
+   Der Techniker wird für den nächsten Start gemerkt.
 4. Bei Bedarf Zielordner und Optionen anpassen, dann *Inventur starten*.
 5. Nach etwa einer Minute ist der Report fertig. *Report öffnen* bzw. *Ordner öffnen* führen direkt hin.
 
@@ -26,7 +27,7 @@ wird der Desktop vorgeschlagen. Der Dateiname ist `Inventur_<RECHNER>_<Datum>.md
 > verschwinden beide Hinweise.
 
 **Ohne Exe:** Repo als ZIP herunterladen und `Start-Inventur.cmd` doppelklicken. Der Starter
-fragt im Konsolenfenster nach dem Kundennamen.
+fragt im Konsolenfenster nach Kunde und Station.
 
 ## Dateien
 
@@ -37,7 +38,7 @@ fragt im Konsolenfenster nach dem Kundennamen.
 | `src/app.manifest` | Manifest der Exe: fordert Adminrechte an |
 | `src/app.ico` | Programmsymbol der Exe (16–256 px) |
 | `build.ps1` | Baut `dist\Inventur.exe` |
-| `Start-Inventur.cmd` | Alternative ohne Exe: holt Adminrechte, fragt nach dem Kundennamen und startet das Skript |
+| `Start-Inventur.cmd` | Alternative ohne Exe: holt Adminrechte, fragt nach Kunde und Station und startet das Skript |
 
 ## Was erfasst wird
 
@@ -59,12 +60,13 @@ Ohne Oberfläche, z. B. für eigene Automatisierung, lässt sich das Skript dire
 PowerShell aufrufen, die als Administrator läuft:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster GmbH" -Techniker "Max Mustermann"
+powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster GmbH" -Station "Empfang 1" -Techniker "Max Mustermann"
 ```
 
 | Parameter | Bedeutung |
 |---|---|
 | `-Kunde "Name"` | Kundenname im Report-Kopf |
+| `-Station "Name"` | Sprechender Name des Arbeitsplatzes, z. B. „PC Sonja“; steht in der Überschrift vor dem Rechnernamen |
 | `-Techniker "Name"` | Name des Technikers im Report-Kopf |
 | `-OutputPath <Datei oder Ordner>` | Ziel des Reports (Standard: Ordner des Skripts) |
 | `-IncludeProductKey` | OEM-Schlüssel aus der Firmware vollständig ausgeben (Standard: nur die letzten 5 Zeichen) |

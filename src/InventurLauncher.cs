@@ -49,7 +49,7 @@ namespace WinInventory
         internal const string IconCredit = "Icon: Fluent Emoji © Microsoft Corporation (MIT)";
         const string Website = "www.netixx.it";
 
-        TextBox txtKunde, txtTechniker, txtOrdner, txtLog;
+        TextBox txtKunde, txtStation, txtTechniker, txtOrdner, txtLog;
         CheckBox chkStore, chkKey;
         Button btnStart, btnBrowse, btnOpen, btnFolder;
         ProgressBar progress;
@@ -72,8 +72,8 @@ namespace WinInventory
             Font = SystemFonts.MessageBoxFont;
             LoadWindowIcons();
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(620, 520);
-            MinimumSize = new Size(520, 440);
+            ClientSize = new Size(620, 550);
+            MinimumSize = new Size(520, 470);
             BuildLayout();
             // Designer-Muster: ResumeLayout(false) richtet die Anker aller Controls ein,
             // bevor PerformLayout mit dem DPI-Faktor skaliert.
@@ -106,6 +106,8 @@ namespace WinInventory
             base.OnLoad(e);
             // WinForms rechnet das Kleinbild sonst aus dem grossen Icon herunter.
             if (smallIcon != IntPtr.Zero) SendMessage(Handle, WM_SETICON, (IntPtr)ICON_SMALL, smallIcon);
+            // Grauer Beispieltext im leeren Feld
+            SendMessage(txtStation.Handle, EM_SETCUEBANNER, (IntPtr)1, "z. B. PC Sonja oder Empfang 1");
         }
 
         void BuildLayout()
@@ -117,6 +119,7 @@ namespace WinInventory
             t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            int row = 0;
 
             Label intro = new Label();
             intro.Text = "Erfasst Hardware, Sicherheit, Benutzer, Lizenz und installierte Software " +
@@ -124,33 +127,36 @@ namespace WinInventory
             intro.AutoSize = true;
             intro.MaximumSize = new Size(580, 0);
             intro.Margin = new Padding(3, 0, 3, 12);
-            t.Controls.Add(intro, 0, 0);
+            t.Controls.Add(intro, 0, row++);
             t.SetColumnSpan(intro, 3);
 
             txtKunde = new TextBox();
-            AddRow(t, 1, "Kunde:", txtKunde, null);
+            AddRow(t, row++, "Kunde:", txtKunde, null);
+
+            txtStation = new TextBox();
+            AddRow(t, row++, "Station:", txtStation, null);
 
             txtTechniker = new TextBox();
-            AddRow(t, 2, "Techniker:", txtTechniker, null);
+            AddRow(t, row++, "Techniker:", txtTechniker, null);
 
             txtOrdner = new TextBox();
             btnBrowse = new Button();
             btnBrowse.Text = "Durchsuchen…";
             btnBrowse.AutoSize = true;
             btnBrowse.Click += OnBrowse;
-            AddRow(t, 3, "Speichern in:", txtOrdner, btnBrowse);
+            AddRow(t, row++, "Speichern in:", txtOrdner, btnBrowse);
 
             chkStore = new CheckBox();
             chkStore.Text = "Store-Apps auflisten";
             chkStore.Checked = true;
             chkStore.AutoSize = true;
-            t.Controls.Add(chkStore, 1, 4);
+            t.Controls.Add(chkStore, 1, row++);
             t.SetColumnSpan(chkStore, 2);
 
             chkKey = new CheckBox();
             chkKey.Text = "OEM-Produktschlüssel vollständig ausgeben (sonst maskiert)";
             chkKey.AutoSize = true;
-            t.Controls.Add(chkKey, 1, 5);
+            t.Controls.Add(chkKey, 1, row++);
             t.SetColumnSpan(chkKey, 2);
 
             btnStart = new Button();
@@ -160,7 +166,7 @@ namespace WinInventory
             btnStart.Anchor = AnchorStyles.Right;
             btnStart.Margin = new Padding(3, 10, 3, 10);
             btnStart.Click += OnStart;
-            t.Controls.Add(btnStart, 0, 6);
+            t.Controls.Add(btnStart, 0, row++);
             t.SetColumnSpan(btnStart, 3);
 
             progress = new ProgressBar();
@@ -168,7 +174,7 @@ namespace WinInventory
             progress.MarqueeAnimationSpeed = 30;
             progress.Dock = DockStyle.Fill;
             progress.Visible = false;
-            t.Controls.Add(progress, 0, 7);
+            t.Controls.Add(progress, 0, row++);
             t.SetColumnSpan(progress, 3);
 
             txtLog = new TextBox();
@@ -178,7 +184,8 @@ namespace WinInventory
             txtLog.Dock = DockStyle.Fill;
             txtLog.Font = new Font(FontFamily.GenericMonospace, Font.SizeInPoints);
             txtLog.BackColor = SystemColors.Window;
-            t.Controls.Add(txtLog, 0, 8);
+            int logRow = row++;   // die einzige Zeile, die mit dem Fenster waechst
+            t.Controls.Add(txtLog, 0, logRow);
             t.SetColumnSpan(txtLog, 3);
 
             FlowLayoutPanel bottom = new FlowLayoutPanel();
@@ -201,7 +208,7 @@ namespace WinInventory
             bottom.Controls.Add(lblStatus);
             bottom.Controls.Add(btnOpen);
             bottom.Controls.Add(btnFolder);
-            t.Controls.Add(bottom, 0, 9);
+            t.Controls.Add(bottom, 0, row++);
             t.SetColumnSpan(bottom, 3);
 
             TableLayoutPanel footer = new TableLayoutPanel();
@@ -230,13 +237,13 @@ namespace WinInventory
             lnkWebsite.LinkClicked += OnWebsite;
             footer.Controls.Add(lnkWebsite, 1, 0);
 
-            t.Controls.Add(footer, 0, 10);
+            t.Controls.Add(footer, 0, row++);
             t.SetColumnSpan(footer, 3);
 
-            t.RowCount = 11;
+            t.RowCount = row;
             for (int i = 0; i < t.RowCount; i++)
             {
-                t.RowStyles.Add(i == 8 ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
+                t.RowStyles.Add(i == logRow ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
             }
             Controls.Add(t);
         }
@@ -256,7 +263,7 @@ namespace WinInventory
 
         void SetRunning(bool running)
         {
-            txtKunde.Enabled = txtTechniker.Enabled = txtOrdner.Enabled = !running;
+            txtKunde.Enabled = txtStation.Enabled = txtTechniker.Enabled = txtOrdner.Enabled = !running;
             btnBrowse.Enabled = chkStore.Enabled = chkKey.Enabled = btnStart.Enabled = !running;
             progress.Visible = running;
             UseWaitCursor = running;
@@ -286,6 +293,7 @@ namespace WinInventory
         void OnStart(object sender, EventArgs e)
         {
             string kunde = txtKunde.Text.Trim();
+            string station = txtStation.Text.Trim();
             string techniker = txtTechniker.Text.Trim();
             string ordner = NormalizeFolder(txtOrdner.Text);
 
@@ -327,6 +335,7 @@ namespace WinInventory
                 args.Append("-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ").Append(Quote(script));
                 args.Append(" -OutputPath ").Append(Quote(reportPath));
                 if (kunde.Length > 0) args.Append(" -Kunde ").Append(Quote(kunde));
+                if (station.Length > 0) args.Append(" -Station ").Append(Quote(station));
                 if (techniker.Length > 0) args.Append(" -Techniker ").Append(Quote(techniker));
                 if (!chkStore.Checked) args.Append(" -NoStoreApps");
                 if (chkKey.Checked) args.Append(" -IncludeProductKey");
@@ -459,8 +468,12 @@ namespace WinInventory
         [DllImport("user32.dll")]
         static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, string lParam);
+
         const int WM_SETICON = 0x80;
         const int ICON_SMALL = 0;
+        const int EM_SETCUEBANNER = 0x1501;
 
         static string DefaultFolder()
         {

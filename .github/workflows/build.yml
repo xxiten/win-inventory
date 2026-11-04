@@ -32,7 +32,7 @@ jobs:
         shell: powershell
         run: |
           $report = Join-Path $env:RUNNER_TEMP 'Inventur_CI.md'
-          .\Invoke-Inventur.ps1 -Kunde 'CI-Test & Co' -Techniker 'GitHub Actions' -OutputPath $report
+          .\Invoke-Inventur.ps1 -Kunde 'CI-Test & Co' -Station 'Empfang 1' -Techniker 'GitHub Actions' -OutputPath $report
           if (-not (Test-Path $report)) { throw 'Kein Report erzeugt.' }
           $text = Get-Content $report -Encoding UTF8
           $text | Where-Object { $_ -match 'Nicht verf' } | ForEach-Object { Write-Host "::warning::$_" }

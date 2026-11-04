@@ -17,6 +17,10 @@
 .PARAMETER Kunde
     Optionaler Kundenname für den Report-Kopf.
 
+.PARAMETER Station
+    Optionaler sprechender Name des Arbeitsplatzes, z. B. "PC Sonja" oder
+    "Empfang 1". Steht in der Überschrift vor dem Rechnernamen.
+
 .PARAMETER Techniker
     Optionaler Name des Technikers, der die Inventur durchführt.
 
@@ -28,12 +32,13 @@
     Store-/Appx-Apps nicht auflisten.
 
 .EXAMPLE
-    .\Invoke-Inventur.ps1 -Kunde "Muster GmbH" -Techniker "Max Mustermann"
+    .\Invoke-Inventur.ps1 -Kunde "Muster GmbH" -Station "Empfang 1" -Techniker "Max Mustermann"
 #>
 [CmdletBinding()]
 param(
     [string]$OutputPath,
     [string]$Kunde,
+    [string]$Station,
     [string]$Techniker,
     [switch]$IncludeProductKey,
     [switch]$NoStoreApps
@@ -174,10 +179,12 @@ Write-Host "Inventur von $env:COMPUTERNAME ..."
 # Kopf: Überschrift und Eckdaten der Inventur
 # ---------------------------------------------------------------------------
 
-Add-Line "# Inventur $env:COMPUTERNAME"
+$titel = if ($Station) { '{0} ({1})' -f (ConvertTo-MdCell $Station), $env:COMPUTERNAME } else { $env:COMPUTERNAME }
+Add-Line "# Inventur $titel"
 Add-Line
 $kopf = [ordered]@{}
 if ($Kunde) { $kopf['Kunde'] = $Kunde }
+if ($Station) { $kopf['Station'] = $Station }
 if ($Techniker) { $kopf['Techniker'] = $Techniker }
 $kopf['Erfasst am'] = $now
 $kopf['Skriptversion'] = $ScriptVersion
