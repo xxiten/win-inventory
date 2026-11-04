@@ -130,6 +130,7 @@ namespace WinInventory
 
             string tempDir = null;
             bool tempProtected = false;
+            string status = "", log = "";
             DateTime start = DateTime.Now;
             Timer poll = new Timer();
             poll.Interval = 500;
@@ -150,6 +151,9 @@ namespace WinInventory
                     try { ((Process)Field(f, "proc")).Kill(); } catch { }
                     typeof(MainForm).GetField("proc", Any).SetValue(f, null);
                 }
+                // Vor dem Schliessen lesen: nach dem Zerstoeren der Fenster ist der Protokolltext weg
+                status = ((Label)Field(f, "lblStatus")).Text;
+                log = ((TextBox)Field(f, "txtLog")).Text;
                 f.Close();
             };
             f.Shown += delegate
@@ -161,10 +165,13 @@ namespace WinInventory
             f.WindowState = FormWindowState.Minimized;
             Application.Run(f);
 
-            string status = ((Label)Field(f, "lblStatus")).Text;
             string report = (string)Field(f, "reportPath");
-            Check("Inventurlauf Status", "True", status.StartsWith("Fertig").ToString());
-            if (!status.StartsWith("Fertig")) Console.WriteLine(Ascii(((TextBox)Field(f, "txtLog")).Text));
+            Check("Inventurlauf Status \"" + Ascii(status) + "\"", "True", status.StartsWith("Fertig").ToString());
+            if (!status.StartsWith("Fertig"))
+            {
+                Console.WriteLine("        Protokoll:");
+                foreach (string line in log.Split('\n')) Console.WriteLine("        | " + Ascii(line.TrimEnd('\r')));
+            }
             Check("Temp-Ordner unter Windows\\Temp", "True", tempDir != null &&
                   tempDir.StartsWith(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), StringComparison.OrdinalIgnoreCase) ? "True" : "False");
             Check("Temp-Ordner mit geschuetzten Rechten", "True", tempProtected.ToString());
