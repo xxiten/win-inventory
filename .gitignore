@@ -2,3 +2,6 @@
 Inventur_*.md
 Inventur_*.html
 Inventur_*.pdf
+
+# Build-Ausgabe
+dist/

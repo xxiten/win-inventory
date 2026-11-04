@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inventur.exe bauen
+        shell: powershell
+        run: .\build.ps1
+
+      - name: Inventur-Skript testen (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'Inventur_CI.md'
+          .\Invoke-Inventur.ps1 -Kunde 'CI-Test & Co' -Techniker 'GitHub Actions' -OutputPath $report
+          if (-not (Test-Path $report)) { throw 'Kein Report erzeugt.' }
+          $text = Get-Content $report -Encoding UTF8
+          $text | Where-Object { $_ -match 'Nicht verf' } | ForEach-Object { Write-Host "::warning::$_" }
+          Write-Host '----- Report -----'
+          $text | ForEach-Object { Write-Host $_ }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Inventur
+          path: |
+            dist/Inventur.exe
+            ${{ runner.temp }}/Inventur_CI.md
+
+      - name: Release anlegen
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME dist/Inventur.exe --title $env:GITHUB_REF_NAME --generate-notes

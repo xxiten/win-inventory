@@ -18,6 +18,9 @@
 .PARAMETER Kunde
     Optionaler Kundenname für den Report-Kopf.
 
+.PARAMETER Techniker
+    Optionaler Name des Technikers, der die Inventur durchführt.
+
 .PARAMETER IncludeProductKey
     Gibt den im Firmware hinterlegten OEM-Produktschlüssel vollständig aus.
     Standard: nur die letzten 5 Zeichen.
@@ -26,19 +29,20 @@
     Store-/Appx-Apps nicht auflisten.
 
 .EXAMPLE
-    .\Invoke-Inventur.ps1 -Kunde "Muster GmbH"
+    .\Invoke-Inventur.ps1 -Kunde "Muster GmbH" -Techniker "Max Mustermann"
 #>
 [CmdletBinding()]
 param(
     [string]$OutputPath,
     [string]$Kunde,
+    [string]$Techniker,
     [switch]$IncludeProductKey,
     [switch]$NoStoreApps
 )
 
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '1.0.0'
+$ScriptVersion = '1.1.0'
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -168,6 +172,7 @@ $title = "Inventur $env:COMPUTERNAME"
 Add-Line '---'
 Add-Line ('title: "{0}"' -f $title)
 if ($Kunde) { Add-Line ('subtitle: "{0}"' -f ($Kunde -replace '"', "'")) }
+if ($Techniker) { Add-Line ('author: "{0}"' -f ($Techniker -replace '"', "'")) }
 Add-Line ('date: "{0}"' -f $now.ToString('dd.MM.yyyy HH:mm'))
 Add-Line 'lang: de-DE'
 Add-Line '---'
@@ -204,7 +209,8 @@ Invoke-Section 'Übersicht' {
     $data['Letzter Start']      = $os.LastBootUpTime
     $data['Laufzeit']           = '{0} Tage {1} Std.' -f $uptime.Days, $uptime.Hours
     $data['Angemeldeter Benutzer'] = $cs.UserName
-    $data['Erfasst von']        = '{0}\{1}' -f $env:USERDOMAIN, $env:USERNAME
+    if ($Techniker) { $data['Techniker'] = $Techniker }
+    $data['Ausgeführt als']     = '{0}\{1}' -f $env:USERDOMAIN, $env:USERNAME
     $data['Erfasst am']         = $now
     $data['Skriptversion']      = $ScriptVersion
     Add-KeyValueTable $data
