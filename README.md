@@ -13,7 +13,8 @@ wird mit Pandoc ein sauberer HTML- oder PDF-Bericht für den Kunden.
 1. Repo als ZIP herunterladen (*Code → Download ZIP*) und auf den Zielrechner kopieren, z. B. per USB-Stick.
 2. ZIP entpacken und **`Start-Inventur.cmd`** doppelklicken.
 3. Die Abfrage nach Administratorrechten bestätigen.
-4. Der Report liegt danach im selben Ordner als `Inventur_<RECHNER>_<Datum>.md`.
+4. Kundennamen eingeben, oder mit Enter ohne Kundennamen fortfahren.
+5. Der Report liegt danach im selben Ordner als `Inventur_<RECHNER>_<Datum>.md`.
 
 > Warnt Windows SmartScreen beim Start, weil die Datei aus dem Internet stammt:
 > *Weitere Informationen → Trotzdem ausführen*, oder vorher in den Dateieigenschaften
@@ -24,7 +25,7 @@ wird mit Pandoc ein sauberer HTML- oder PDF-Bericht für den Kunden.
 | Datei | Zweck |
 |---|---|
 | `Invoke-Inventur.ps1` | Das Inventur-Skript |
-| `Start-Inventur.cmd` | Starter per Doppelklick: holt Adminrechte und startet das Skript |
+| `Start-Inventur.cmd` | Starter per Doppelklick: holt Adminrechte, fragt nach dem Kundennamen und startet das Skript |
 | `report.css` | Layout für den HTML/PDF-Report (A4, Seitenzahlen, Tabellen) |
 
 ## Was erfasst wird
@@ -43,7 +44,7 @@ und das Skript läuft weiter.
 
 ## Aufruf mit Parametern
 
-In einer PowerShell, die als Administrator läuft:
+Für alle Optionen das Skript direkt in einer PowerShell aufrufen, die als Administrator läuft:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster GmbH"
