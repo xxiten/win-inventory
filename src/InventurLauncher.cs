@@ -1,4 +1,4 @@
-// Windows-Inventur: grafischer Starter fuer Invoke-Inventur.ps1
+// Netixx Windows Inventory: grafischer Starter fuer Invoke-Inventur.ps1
 //
 // Bewusst in C# 5 geschrieben (keine String-Interpolation, kein ?.), damit der
 // in Windows mitgelieferte .NET-Framework-Compiler (csc.exe v4.0.30319) es baut.
@@ -17,11 +17,13 @@ using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("Windows-Inventur")]
+[assembly: AssemblyTitle("Netixx Windows Inventory")]
 [assembly: AssemblyDescription("Inventur eines Windows-10/11-Rechners als Markdown-Report")]
-[assembly: AssemblyProduct("win-inventory")]
-[assembly: AssemblyVersion("0.8.1.0")]
-[assembly: AssemblyFileVersion("0.8.1.0")]
+[assembly: AssemblyCompany("Netixx IT Solutions")]
+[assembly: AssemblyProduct("Netixx Windows Inventory")]
+[assembly: AssemblyCopyright("© 2026 Netixx IT Solutions")]
+[assembly: AssemblyVersion("0.8.2.0")]
+[assembly: AssemblyFileVersion("0.8.2.0")]
 
 namespace WinInventory
 {
@@ -40,6 +42,7 @@ namespace WinInventory
     {
         const string ResourceName = "Invoke-Inventur.ps1";
         const string SettingsKey = @"Software\win-inventory";
+        const string Website = "www.netixx.it";
 
         TextBox txtKunde, txtTechniker, txtOrdner, txtLog;
         CheckBox chkStore, chkKey;
@@ -53,13 +56,20 @@ namespace WinInventory
 
         public MainForm()
         {
-            Text = "Windows-Inventur – " + Environment.MachineName;
+            // Alle Pixelangaben gelten fuer 96 DPI (100 %). Ohne AutoScaleDimensions
+            // skaliert WinForms nichts, und bei 125/150 % waere das Fenster zu klein
+            // fuer die mitwachsende Schrift.
+            SuspendLayout();
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Text = "Netixx Windows Inventory – " + Environment.MachineName;
             Font = SystemFonts.MessageBoxFont;
-            AutoScaleMode = AutoScaleMode.Font;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(620, 500);
-            MinimumSize = new Size(520, 420);
+            ClientSize = new Size(620, 520);
+            MinimumSize = new Size(520, 440);
             BuildLayout();
+            ResumeLayout(false);
+            PerformLayout();
 
             txtTechniker.Text = LoadSetting("Techniker");
             txtOrdner.Text = DefaultFolder();
@@ -167,7 +177,36 @@ namespace WinInventory
             t.Controls.Add(bottom, 0, 9);
             t.SetColumnSpan(bottom, 3);
 
-            t.RowCount = 10;
+            TableLayoutPanel footer = new TableLayoutPanel();
+            footer.Dock = DockStyle.Fill;
+            footer.AutoSize = true;
+            footer.Margin = new Padding(0, 6, 0, 0);
+            footer.ColumnCount = 2;
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            Label lblVersion = new Label();
+            lblVersion.Text = "Version " + Assembly.GetExecutingAssembly().GetName().Version.ToString(3) +
+                              " · © 2026 Netixx IT Solutions";
+            lblVersion.AutoSize = true;
+            lblVersion.Anchor = AnchorStyles.Left;
+            lblVersion.ForeColor = SystemColors.GrayText;
+            footer.Controls.Add(lblVersion, 0, 0);
+
+            string credit = "created for the people by ";
+            LinkLabel lnkWebsite = new LinkLabel();
+            lnkWebsite.Text = credit + Website;
+            lnkWebsite.LinkArea = new LinkArea(credit.Length, Website.Length);
+            lnkWebsite.AutoSize = true;
+            lnkWebsite.Anchor = AnchorStyles.Right;
+            lnkWebsite.ForeColor = SystemColors.GrayText;
+            lnkWebsite.LinkClicked += OnWebsite;
+            footer.Controls.Add(lnkWebsite, 1, 0);
+
+            t.Controls.Add(footer, 0, 10);
+            t.SetColumnSpan(footer, 3);
+
+            t.RowCount = 11;
             for (int i = 0; i < t.RowCount; i++)
             {
                 t.RowStyles.Add(i == 8 ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
@@ -330,6 +369,14 @@ namespace WinInventory
         void OnOpenFolder(object sender, EventArgs e)
         {
             Process.Start("explorer.exe", "/select," + Quote(reportPath));
+        }
+
+        void OnWebsite(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            // Ueber explorer.exe, damit der Browser nicht mit den Adminrechten
+            // dieses Prozesses startet.
+            try { Process.Start("explorer.exe", "https://" + Website); }
+            catch (Exception) { }
         }
 
         void OnFormClosing(object sender, FormClosingEventArgs e)

@@ -117,5 +117,5 @@ erzeugte Reports (`Inventur_*`) sind per `.gitignore` vom Repo ausgeschlossen.
 
 ## Status
 
-Version 0.8.1. Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
+Version 0.8.2. Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
 Windows 10 und 11 bitte als Issue.
