@@ -262,7 +262,7 @@ Invoke-Section 'Mainboard & Firmware' -Level 3 {
         'Mainboard-Seriennr.'  = $bb.SerialNumber
         'BIOS-Hersteller'      = $bios.Manufacturer
         'BIOS-Version'         = $bios.SMBIOSBIOSVersion
-        'BIOS-Datum'           = if ($bios.ReleaseDate) { $bios.ReleaseDate.ToString('dd.MM.yyyy') }
+        'BIOS-Datum'           = $(if ($bios.ReleaseDate) { $bios.ReleaseDate.ToString('dd.MM.yyyy') })
         'Firmware-Modus'       = switch ($fw) { 1 { 'Legacy BIOS' } 2 { 'UEFI' } default { 'unbekannt' } }
     })
 }
