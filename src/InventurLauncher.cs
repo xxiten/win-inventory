@@ -12,6 +12,7 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -19,8 +20,8 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("Windows-Inventur")]
 [assembly: AssemblyDescription("Inventur eines Windows-10/11-Rechners als Markdown-Report")]
 [assembly: AssemblyProduct("win-inventory")]
-[assembly: AssemblyVersion("0.8.0.0")]
-[assembly: AssemblyFileVersion("0.8.0.0")]
+[assembly: AssemblyVersion("0.8.1.0")]
+[assembly: AssemblyFileVersion("0.8.1.0")]
 
 namespace WinInventory
 {
@@ -263,7 +264,7 @@ namespace WinInventory
                 if (!chkStore.Checked) args.Append(" -NoStoreApps");
                 if (chkKey.Checked) args.Append(" -IncludeProductKey");
 
-                Encoding oem = Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+                Encoding oem = ConsoleEncoding();
                 ProcessStartInfo psi = new ProcessStartInfo(PowerShellPath(), args.ToString());
                 psi.UseShellExecute = false;
                 psi.CreateNoWindow = true;
@@ -355,6 +356,18 @@ namespace WinInventory
             string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             string sys = (Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess) ? "Sysnative" : "System32";
             return Path.Combine(win, sys + @"\WindowsPowerShell\v1.0\powershell.exe");
+        }
+
+        [DllImport("kernel32.dll")]
+        static extern int GetOEMCP();
+
+        static Encoding ConsoleEncoding()
+        {
+            // PowerShell schreibt in die unsichtbare Konsole mit der OEM-Codepage des
+            // Systems. CultureInfo.TextInfo.OEMCodePage taugt dafuer nicht: Regionsformate
+            // ohne eigene Codepage (z. B. de-IT, en-DE, en-AT) liefern dort nur 1.
+            try { return Encoding.GetEncoding(GetOEMCP()); }
+            catch (Exception) { return Encoding.Default; }
         }
 
         static string DefaultFolder()
