@@ -39,6 +39,8 @@ fragt im Konsolenfenster nach Kunde und Station.
 | `src/app.ico` | Programmsymbol der Exe (16–256 px) |
 | `build.ps1` | Baut `dist\Inventur.exe` |
 | `Start-Inventur.cmd` | Alternative ohne Exe: holt Adminrechte, fragt nach Kunde und Station und startet das Skript |
+| `tests/` | Automatische Tests (`Invoke-Tests.ps1`, dazu `LauncherTests.cs` für die Exe) |
+| `CHANGELOG.md` | Änderungen je Version; daraus entstehen die Release-Notes |
 
 ## Was erfasst wird
 
@@ -47,9 +49,10 @@ fragt im Konsolenfenster nach Kunde und Station.
 | Übersicht | Hersteller, Modell, Seriennummer, UUID, Gerätetyp, Windows-Edition, -Version und -Build, Installationsdatum, Laufzeit, angemeldeter Benutzer |
 | Hardware | CPU, RAM (Module, belegte Slots, max. Ausbau), Mainboard, BIOS/UEFI, physische Datenträger (Typ, Bus, Zustand, Seriennummer), Laufwerke mit Füllstand |
 | Peripherie & Grafik | Grafikkarten (Speicher, Treiber, Auflösung), Monitore (Hersteller, Modell, Seriennummer, Baujahr), Drucker, Akku-Gesundheit |
+| Netzwerk | Adapter (Status, MAC-Adresse, Geschwindigkeit), IP-Konfiguration der verbundenen Adapter (IPv4, DHCP, Gateway, DNS-Server, IPv6) |
 | Sicherheit | TPM, Secure Boot, VBS/Credential Guard, BitLocker je Laufwerk, Virenschutz und Defender-Details, Firewall-Profile, letzte Updates, ausstehender Neustart |
 | Benutzer & Lizenz | AD-Domäne oder Arbeitsgruppe, Entra-ID-Beitritt mit Mandant, MDM/Intune, lokale Benutzer und Administratoren, Windows-Lizenz (Kanal, Status, maskierter Schlüssel) |
-| Installierte Software | Klassische Programme (64/32 Bit, maschinenweit und pro Benutzer) und Store-Apps, jeweils ohne Systemkomponenten |
+| Installierte Software | Microsoft 365 / Office (Produkt, Version, Update-Kanal, Lizenzart), klassische Programme (64/32 Bit, maschinenweit und pro Benutzer) und Store-Apps, jeweils ohne Systemkomponenten |
 
 Kann ein Abschnitt nicht gelesen werden, steht im Report *Nicht verfügbar* mit dem Grund,
 und das Skript läuft weiter.
@@ -87,13 +90,21 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 `Invoke-Inventur.ps1` in die Exe ein. Änderungen am Skript landen also erst nach einem neuen
 Build in der Exe.
 
+Tests, ohne Zusatzmodule. Mit Adminrechten gestartet, läuft dabei auch eine komplette Inventur
+über die Exe:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tests\Invoke-Tests.ps1
+```
+
 Den Rest erledigt GitHub Actions (`.github/workflows/build.yml`):
 
-- Jeder Push auf `main` baut die Exe auf einem Windows-Runner, führt das Skript testweise aus
-  und stellt Exe und Test-Report unter *Actions* als Download bereit.
+- Jeder Push auf `main` baut die Exe auf einem Windows-Runner, führt das Skript und die Tests
+  aus und stellt Exe und Test-Report unter *Actions* als Download bereit.
 - Ein Release mit der Exe entsteht über *Actions → Build → Run workflow*: im Feld
-  *Release anlegen* die Version eintragen, z. B. `0.8.0`. Sie muss zu `$ScriptVersion` in
-  `Invoke-Inventur.ps1` passen, sonst bricht der Lauf ab. Ein gepushter Tag `v*` funktioniert ebenso.
+  *Release anlegen* die Version eintragen, z. B. `0.9.0`. Sie muss zu `$ScriptVersion` in
+  `Invoke-Inventur.ps1` passen, und `CHANGELOG.md` braucht einen Abschnitt dafür. Der wird
+  zu den Release-Notes. Ein gepushter Tag `v*` funktioniert ebenso.
 
 ## Datenschutz
 
@@ -103,8 +114,10 @@ erzeugte Reports (`Inventur_*`) sind per `.gitignore` vom Repo ausgeschlossen.
 
 ## Status
 
-Aktuelle Version siehe [Releases](https://github.com/xxiten/win-inventory/releases). Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
-Windows 10 und 11 bitte als Issue.
+Aktuelle Version siehe [Releases](https://github.com/xxiten/win-inventory/releases), Änderungen
+im [CHANGELOG](CHANGELOG.md). Getestet bei jedem Build auf einem Windows-Server-Runner und auf
+zwei Windows-11-Rechnern. Vor 1.0 stehen noch Testläufe unter Windows 10, auf Entra-ID-Rechnern
+und auf Notebooks mit BitLocker aus. Rückmeldungen bitte als Issue.
 
 ## Lizenz
 

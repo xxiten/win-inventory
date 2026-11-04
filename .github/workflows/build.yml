@@ -40,6 +40,12 @@ jobs:
           Write-Host '----- Report -----'
           $text | ForEach-Object { Write-Host $_ }
 
+      # Hilfsfunktionen, Gliederung des CI-Reports und ein Inventurlauf über die Exe
+      # (der Runner hat Adminrechte, damit läuft auch der geschützte Temp-Ordner mit)
+      - name: Tests
+        shell: powershell
+        run: .\tests\Invoke-Tests.ps1 -ReportPath (Join-Path $env:RUNNER_TEMP 'Inventur_CI.md')
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Inventur
@@ -54,6 +60,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: Inventur
@@ -72,5 +82,13 @@ jobs:
           $exe = Get-ChildItem artifact -Recurse -Filter Inventur.exe | Select-Object -First 1
           $version = ([version]$exe.VersionInfo.FileVersion).ToString(3)
           if ($tag -ne "v$version") { throw "Tag $tag passt nicht zur Version $version der Exe." }
-          gh release create $tag $exe.FullName --target $env:GITHUB_SHA --title $tag --generate-notes
+          # Release-Notes = Abschnitt dieser Version aus CHANGELOG.md
+          $log = Get-Content CHANGELOG.md -Encoding UTF8
+          $start = @(0..($log.Count - 1) | Where-Object { $log[$_] -match ('^## \[' + [regex]::Escape($version) + '\]') })[0]
+          if ($null -eq $start) { throw "CHANGELOG.md hat keinen Abschnitt fuer $version." }
+          $end = @(($start + 1)..($log.Count - 1) | Where-Object { $log[$_] -match '^## \[' }) + $log.Count | Select-Object -First 1
+          if ($end -le $start + 1) { throw "Der Abschnitt fuer $version in CHANGELOG.md ist leer." }
+          $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          [IO.File]::WriteAllLines($notes, [string[]]$log[($start + 1)..($end - 1)], (New-Object Text.UTF8Encoding $false))
+          gh release create $tag $exe.FullName --target $env:GITHUB_SHA --title $tag --notes-file $notes
           if ($LASTEXITCODE -ne 0) { throw 'Release fehlgeschlagen.' }

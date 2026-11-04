@@ -46,7 +46,7 @@ param(
 
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '0.8.4'
+$ScriptVersion = '0.9.0'
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -395,6 +395,40 @@ Invoke-Section 'Akku' -Level 3 {
 }
 
 # ---------------------------------------------------------------------------
+# Netzwerk
+# ---------------------------------------------------------------------------
+
+Add-Line '## Netzwerk'
+Add-Line
+
+Invoke-Section 'Adapter' -Level 3 {
+    $statusText = @{ 'Up' = 'verbunden'; 'Disconnected' = 'getrennt'; 'Disabled' = 'deaktiviert'; 'Not Present' = 'nicht vorhanden' }
+    Add-Table @(Get-NetAdapter -ErrorAction Stop | Sort-Object Name) ([ordered]@{
+        'Name'            = 'Name'
+        'Beschreibung'    = 'InterfaceDescription'
+        'Status'          = { param($a) $s = "$($a.Status)"; if ($statusText.ContainsKey($s)) { $statusText[$s] } else { $s } }
+        'MAC-Adresse'     = 'MacAddress'
+        'Geschwindigkeit' = { param($a) if ("$($a.Status)" -eq 'Up') { $a.LinkSpeed } }
+    })
+}
+
+Invoke-Section 'IP-Konfiguration' -Level 3 {
+    # Nur verbundene Adapter; DHCP steht nicht in Get-NetIPConfiguration, sondern am IP-Interface.
+    # Der Index ist dort UInt32, in Get-NetIPConfiguration Int32 - für die Hashtable angleichen.
+    $dhcp = @{}
+    Get-NetIPInterface -AddressFamily IPv4 -ErrorAction Stop | ForEach-Object { $dhcp[[int]$_.InterfaceIndex] = "$($_.Dhcp)" -eq 'Enabled' }
+    $configs = @(Get-NetIPConfiguration -ErrorAction Stop | Where-Object { "$($_.NetAdapter.Status)" -eq 'Up' } | Sort-Object InterfaceAlias)
+    Add-Table $configs ([ordered]@{
+        'Adapter'    = 'InterfaceAlias'
+        'IPv4'       = { param($c) ($c.IPv4Address | ForEach-Object { '{0}/{1}' -f $_.IPAddress, $_.PrefixLength }) -join ', ' }
+        'DHCP'       = { param($c) $dhcp[[int]$c.InterfaceIndex] }
+        'Gateway'    = { param($c) ($c.IPv4DefaultGateway | ForEach-Object { $_.NextHop }) -join ', ' }
+        'DNS-Server' = { param($c) ($c.DNSServer | Where-Object { $_.AddressFamily -eq 2 } | ForEach-Object { $_.ServerAddresses }) -join ', ' }
+        'IPv6'       = { param($c) ($c.IPv6Address | Where-Object { $_.IPAddress -notlike 'fe80*' } | ForEach-Object { $_.IPAddress }) -join ', ' }
+    }) -Empty '_Kein verbundener Netzwerkadapter._'
+}
+
+# ---------------------------------------------------------------------------
 # Sicherheit
 # ---------------------------------------------------------------------------
 
@@ -592,6 +626,63 @@ Invoke-Section 'Windows-Lizenz' -Level 3 {
 
 Add-Line '## Installierte Software'
 Add-Line
+
+Invoke-Section 'Microsoft 365 / Office' -Level 3 {
+    $found = $false
+    $c2r = 'HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration'
+    $ids = Get-RegValue $c2r 'ProductReleaseIds'
+    if ($ids) {
+        $found = $true
+        $names = @{
+            'O365ProPlusRetail'  = 'Microsoft 365 Apps for enterprise'
+            'O365BusinessRetail' = 'Microsoft 365 Apps for business'
+            'O365HomePremRetail' = 'Microsoft 365 Family/Single'
+        }
+        # Update-Kanal steckt als GUID in der CDN-Adresse; UpdateChannel (Richtlinie) hat Vorrang
+        $channels = @{
+            '492350f6-3a01-4f97-b9c0-c7c6ddf67d60' = 'Aktueller Kanal'
+            '64256afe-f5d9-4f86-8936-8840a6a4f5be' = 'Aktueller Kanal (Vorschau)'
+            '55336b82-a18d-4dd6-b5f6-9e5095c314a6' = 'Monatlicher Enterprise-Kanal'
+            '7ffbc6bf-bc32-4f92-8982-f9dd17fd3114' = 'Halbjährlicher Enterprise-Kanal'
+            'b8f9b850-328d-4355-9145-c59439a0c4cf' = 'Halbjährlicher Enterprise-Kanal (Vorschau)'
+            '5440fd1f-7ecb-4221-8110-145efaa6372f' = 'Beta-Kanal'
+        }
+        $url = Get-RegValue $c2r 'UpdateChannel'
+        if (-not $url) { $url = Get-RegValue $c2r 'CDNBaseUrl' }
+        $channel = 'unbekannt'
+        if ($url -match '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})') {
+            $channel = if ($channels.ContainsKey($Matches[1])) { $channels[$Matches[1]] } else { $Matches[1] }
+        }
+        $products = foreach ($id in ($ids -split ',')) {
+            if ($names.ContainsKey($id)) { '{0} ({1})' -f $names[$id], $id } else { $id }
+        }
+        $lizenz = if ($ids -match 'O365') { 'Abonnement, lizenziert über die Anmeldung des Benutzers' }
+                  elseif ($ids -match 'Volume') { 'Volumenlizenz' } else { 'Einzelplatzlizenz (Retail)' }
+        Add-KeyValueTable ([ordered]@{
+            'Produkt'      = $products -join ', '
+            'Version'      = Get-RegValue $c2r 'VersionToReport'
+            'Architektur'  = Get-RegValue $c2r 'Platform'
+            'Update-Kanal' = $channel
+            'Lizenzart'    = $lizenz
+            'Gemeinsame Computeraktivierung' = (Get-RegValue $c2r 'SharedComputerLicensing') -eq '1'
+        })
+    }
+    # Dauerlizenzen (Office 2016-2024, Volumen/Retail) stehen im Windows-Lizenzdienst. Die
+    # "Grace"-Einträge der Abos zeigen dort "Benachrichtigung", obwohl Office lizenziert ist.
+    $officeAppId = '0ff1ce15-a989-479d-af46-f275c6370663'
+    $statusText = @{ 0 = 'Nicht lizenziert'; 1 = 'Aktiviert'; 2 = 'Kulanzzeit (OOB)'; 3 = 'Kulanzzeit (OOT)'; 4 = 'Nicht-Original-Kulanz'; 5 = 'Benachrichtigung'; 6 = 'Erweiterte Kulanz' }
+    $lic = @(Get-Cim SoftwareLicensingProduct -Filter "ApplicationID='$officeAppId' AND PartialProductKey IS NOT NULL" |
+             Where-Object { $_.Name -notmatch 'O365' })
+    if ($lic.Count -gt 0) {
+        $found = $true
+        Add-Table $lic ([ordered]@{
+            'Lizenz'          = 'Name'
+            'Status'          = { param($l) $statusText[[int]$l.LicenseStatus] }
+            'Teil-Produktkey' = { param($l) 'XXXXX-XXXXX-XXXXX-XXXXX-' + $l.PartialProductKey }
+        })
+    }
+    if (-not $found) { Add-Line '_Kein Microsoft 365 / Office gefunden._'; Add-Line }
+}
 
 Invoke-Section 'Programme' -Level 3 {
     $sources = @(

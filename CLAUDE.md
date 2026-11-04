@@ -15,10 +15,23 @@ Everything user-facing (report text, GUI, README, code comments, commit messages
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 
 # Run the script directly (elevated shell for complete results; non-admin also works but sections are missing)
-powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster GmbH" -Techniker "Max Mustermann" -OutputPath $env:TEMP\Inventur_Test.md
+powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster GmbH" -Station "Empfang 1" -Techniker "Max Mustermann" -OutputPath $env:TEMP\Inventur_Test.md
+
+# Tests (no modules needed); -ReportPath additionally checks a full report's structure
+powershell -ExecutionPolicy Bypass -File .\tests\Invoke-Tests.ps1 [-ReportPath $env:TEMP\Inventur_Test.md] [-SkipLauncher]
 ```
 
-Always test with `powershell` (5.1), not `pwsh`: 7.x accepts syntax that 5.1 rejects. There is no test suite. The check is running the script and looking for `_Nicht verfügbar: …_` lines in the report. CI does the same: on every push/PR to `main`, `.github/workflows/build.yml` builds the exe on `windows-latest`, runs the script under 5.1, emits a warning for each "Nicht verf" line, and uploads the exe plus the test report as an artifact.
+Always test with `powershell` (5.1), not `pwsh`: 7.x accepts syntax that 5.1 rejects. `tests\Invoke-Tests.ps1` covers the following:
+- **Parsing:** the script parses under 5.1.
+- **Helpers:** `ConvertTo-MdCell` and `Format-Bytes`, extracted via the AST, so the inventory doesn't run.
+- **Report structure:** with `-ReportPath` it checks the report header and the exact ordered list of `##`/`###` headings. That report needs `-Kunde`, `-Station` and `-Techniker` and must be made without `-NoStoreApps`.
+- **Launcher:** `tests\LauncherTests.cs` is compiled together with `src\InventurLauncher.cs` and calls its private helpers via reflection. When run elevated, it also does a full inventory through the form, including checks on the protected temp folder. Without admin rights that part is skipped.
+
+CI runs on every push/PR to `main` (`.github/workflows/build.yml`, `windows-latest`):
+1. Builds the exe.
+2. Runs the script under 5.1 and emits a warning for each "Nicht verf" line.
+3. Runs the tests against that report. The runner is elevated, so the full launcher run is included.
+4. Uploads the exe plus the test report as an artifact.
 
 ## Architecture
 
@@ -50,6 +63,8 @@ Helpers to reuse when adding data:
 - **C# 5 only** in `InventurLauncher.cs`. The in-box `csc.exe` v4.0.30319 has no string interpolation, `?.`, `nameof`, expression-bodied members, etc.
 - **Read-only.** The script must not change system state.
 - **The version number** lives only in `$ScriptVersion` in `Invoke-Inventur.ps1`, in the format `x.y.z`, which `build.ps1` enforces. `build.ps1` generates the exe's `AssemblyVersion` from it, and the footer reads it from there. The `assemblyIdentity` in `app.manifest` stays fixed at 1.0.0.0. Don't add version literals anywhere else. Product, company and copyright text are the `Product`/`Company`/`Copyright` consts in `MainForm`, and the assembly attributes use them too.
-- **Releases:** *Actions → Build → Run workflow* with the version (e.g. `0.8.0`), or push a `v*` tag. The release runs as a separate job, the only one with `contents: write`. It reads the version from the built exe and fails if the tag doesn't match.
+- **Releases:** *Actions → Build → Run workflow* with the version (e.g. `0.9.0`), or push a `v*` tag. The release runs as a separate job, the only one with `contents: write`. It reads the version from the built exe and fails if the tag doesn't match. It takes the release notes from that version's section in `CHANGELOG.md` and fails if that section is missing or empty. Add the changelog entry (German, Neu/Geändert/Behoben/Sicherheit) together with the version bump.
+- **The report structure is a contract.** The heading list is asserted in `tests\Invoke-Tests.ps1`. If you add or rename a section on purpose, update that list and note it in `CHANGELOG.md`. After 1.0, adding a section is a minor version and renaming or removing one is a major version.
+- **GitHub Actions are pinned to commit SHAs** with the version in a comment. When updating, resolve the new tag's SHA (`gh api repos/<owner>/<action>/commits/<tag> --jq .sha`) and read the release notes for breaking changes.
 - **The repo is public and MIT-licensed** (`LICENSE`). Only add third-party assets whose license allows redistribution in a public repo. A Flaticon free icon, for example, does not. `src/app.ico` is from Microsoft Fluent UI Emoji (MIT). If you replace it, update `THIRD-PARTY-NOTICES.md` and `IconCredit` in `MainForm`. `build.ps1` embeds `LICENSE` and `THIRD-PARTY-NOTICES.md` into the exe, because MIT requires the notice in every copy.
 - **Reports contain customer data** (serial numbers, user names, Entra tenant). `Inventur_*` and `dist/` are gitignored. Never commit generated reports. Product keys stay masked unless `-IncludeProductKey` is passed.
