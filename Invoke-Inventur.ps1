@@ -42,7 +42,7 @@ param(
 
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '1.1.0'
+$ScriptVersion = '1.1.1'
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -256,6 +256,13 @@ Invoke-Section 'Arbeitsspeicher' -Level 3 {
 Invoke-Section 'Mainboard & Firmware' -Level 3 {
     $bb = Get-Cim Win32_BaseBoard
     $fw = Get-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control' 'PEFirmwareType'
+    $fwText = switch ($fw) { 1 { 'Legacy BIOS' } 2 { 'UEFI' } default { $null } }
+    if (-not $fwText) {
+        # Fallback: Confirm-SecureBootUEFI gibt es nur auf UEFI-Systemen
+        try { Confirm-SecureBootUEFI -ErrorAction Stop | Out-Null; $fwText = 'UEFI' }
+        catch [System.PlatformNotSupportedException] { $fwText = 'Legacy BIOS' }
+        catch { $fwText = 'unbekannt' }
+    }
     Add-KeyValueTable ([ordered]@{
         'Mainboard-Hersteller' = $bb.Manufacturer
         'Mainboard-Modell'     = $bb.Product
@@ -263,7 +270,7 @@ Invoke-Section 'Mainboard & Firmware' -Level 3 {
         'BIOS-Hersteller'      = $bios.Manufacturer
         'BIOS-Version'         = $bios.SMBIOSBIOSVersion
         'BIOS-Datum'           = $(if ($bios.ReleaseDate) { $bios.ReleaseDate.ToString('dd.MM.yyyy') })
-        'Firmware-Modus'       = switch ($fw) { 1 { 'Legacy BIOS' } 2 { 'UEFI' } default { 'unbekannt' } }
+        'Firmware-Modus'       = $fwText
     })
 }
 
@@ -499,9 +506,10 @@ Invoke-Section 'Domäne & Anmeldung' -Level 3 {
     try {
         $ds = & "$env:SystemRoot\System32\dsregcmd.exe" /status 2>$null
         $get = { param($k) $l = $ds | Where-Object { $_ -match "^\s*$k\s*:" } | Select-Object -First 1; if ($l) { ($l -split ':', 2)[1].Trim() } }
-        $data['Entra ID (Azure AD) beigetreten'] = & $get 'AzureAdJoined'
+        $yesNo = { param($v) switch ($v) { 'YES' { 'Ja' } 'NO' { 'Nein' } default { $v } } }
+        $data['Entra ID (Azure AD) beigetreten'] = & $yesNo (& $get 'AzureAdJoined')
         $tn = & $get 'TenantName'; if ($tn) { $data['Entra-Mandant'] = $tn }
-        $data['Hybrid / AD beigetreten'] = & $get 'DomainJoined'
+        $data['AD-Domäne beigetreten'] = & $yesNo (& $get 'DomainJoined')
         $mdm = & $get 'MdmUrl'; if ($mdm) { $data['MDM (z. B. Intune)'] = $mdm }
     } catch { }
     Add-KeyValueTable $data

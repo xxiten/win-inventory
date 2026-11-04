@@ -10,8 +10,9 @@ wird mit Pandoc ein sauberer HTML- oder PDF-Bericht für den Kunden.
 
 ## Schnellstart mit Inventur.exe
 
-1. `Inventur.exe` aus den [Releases](../../releases) herunterladen und auf den Zielrechner
-   kopieren, z. B. per USB-Stick.
+1. **[Inventur.exe herunterladen](https://github.com/xxiten/win-inventory/releases/latest/download/Inventur.exe)**
+   (immer die neueste Version, ältere unter [Releases](https://github.com/xxiten/win-inventory/releases))
+   und auf den Zielrechner kopieren, z. B. per USB-Stick.
 2. Doppelklicken und die Abfrage nach Administratorrechten bestätigen.
 3. **Kunde** und **Techniker** eintragen. Der Techniker wird für den nächsten Start gemerkt.
 4. Bei Bedarf Zielordner und Optionen anpassen, dann *Inventur starten*.
@@ -104,7 +105,7 @@ Den Rest erledigt GitHub Actions (`.github/workflows/build.yml`):
 
 - Jeder Push auf `main` baut die Exe auf einem Windows-Runner, führt das Skript testweise aus
   und stellt Exe und Test-Report unter *Actions* als Download bereit.
-- Ein Tag `v*` (z. B. `git tag v1.1.0 && git push origin v1.1.0`) legt zusätzlich ein Release
+- Ein Tag `v*` (z. B. `git tag v1.1.1 && git push origin v1.1.1`) legt zusätzlich ein Release
   mit der Exe an.
 
 ## Datenschutz
@@ -115,5 +116,5 @@ erzeugte Reports (`Inventur_*`) sind per `.gitignore` vom Repo ausgeschlossen.
 
 ## Status
 
-Version 1.1.0. Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
+Version 1.1.1. Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
 Windows 10 und 11 bitte als Issue.
