@@ -42,7 +42,7 @@ param(
 
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '1.1.1'
+$ScriptVersion = '0.8.0'
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen

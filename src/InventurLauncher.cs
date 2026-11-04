@@ -19,8 +19,8 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("Windows-Inventur")]
 [assembly: AssemblyDescription("Inventur eines Windows-10/11-Rechners als Markdown-Report")]
 [assembly: AssemblyProduct("win-inventory")]
-[assembly: AssemblyVersion("1.1.1.0")]
-[assembly: AssemblyFileVersion("1.1.1.0")]
+[assembly: AssemblyVersion("0.8.0.0")]
+[assembly: AssemblyFileVersion("0.8.0.0")]
 
 namespace WinInventory
 {

@@ -105,7 +105,7 @@ Den Rest erledigt GitHub Actions (`.github/workflows/build.yml`):
 
 - Jeder Push auf `main` baut die Exe auf einem Windows-Runner, führt das Skript testweise aus
   und stellt Exe und Test-Report unter *Actions* als Download bereit.
-- Ein Tag `v*` (z. B. `git tag v1.1.1 && git push origin v1.1.1`) legt zusätzlich ein Release
+- Ein Tag `v*` (z. B. `git tag v0.8.0 && git push origin v0.8.0`) legt zusätzlich ein Release
   mit der Exe an.
 
 ## Datenschutz
@@ -116,5 +116,5 @@ erzeugte Reports (`Inventur_*`) sind per `.gitignore` vom Repo ausgeschlossen.
 
 ## Status
 
-Version 1.1.1. Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
+Version 0.8.0. Das Skript läuft bei jedem Build auf einem Windows-Server-Runner, ist aber noch nicht auf echten Windows-10/11-Rechnern getestet. Rückmeldungen von Testläufen unter
 Windows 10 und 11 bitte als Issue.
