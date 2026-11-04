@@ -41,7 +41,7 @@ param(
 
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '0.8.3'
+$ScriptVersion = '0.8.4'
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -53,13 +53,17 @@ $script:hinweise = New-Object System.Collections.Generic.List[string]
 function Add-Line { param([string]$Text = '') $script:md.Add($Text) }
 
 function ConvertTo-MdCell {
+    # Wert für eine Tabellenzelle: einzeilig, Markdown-Sonderzeichen entschärft
     param($Value)
     if ($null -eq $Value) { return '' }
     if ($Value -is [datetime]) { return $Value.ToString('dd.MM.yyyy HH:mm') }
     if ($Value -is [bool]) { if ($Value) { return 'Ja' } else { return 'Nein' } }
-    $s = [string]$Value
-    $s = $s -replace '[\r\n]+', ' ' -replace '\|', '\|'
-    return $s.Trim()
+    $s = ([string]$Value -replace '[\r\n]+', ' ').Trim()
+    # Backslash nur vor Satzzeichen verdoppeln, sonst verschluckt Markdown ihn (\\server).
+    # "DOMÄNE\Benutzer" bleibt so lesbar.
+    $s = $s -replace '\\(?=[!-/:-@\[-`{-~])', '\\'
+    # Zeichen, die Tabellenspalten, Hervorhebung, Code oder HTML auslösen
+    return $s -replace '([|*_`<])', '\$1'
 }
 
 function Add-KeyValueTable {
@@ -157,6 +161,9 @@ $csp = $null; try { $csp = Get-Cim Win32_ComputerSystemProduct } catch { }
 
 if (-not $OutputPath) { $OutputPath = $PSScriptRoot }
 if (-not $OutputPath) { $OutputPath = (Get-Location).Path }
+# Wie PowerShell auflösen (relativ zum aktuellen Ordner, "~"); das Schreiben über .NET
+# kennt nur den Prozessordner und würde sonst woanders landen.
+$OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
 if (Test-Path -LiteralPath $OutputPath -PathType Container) {
     $OutputPath = Join-Path $OutputPath ('Inventur_{0}_{1}.md' -f $env:COMPUTERNAME, $now.ToString('yyyy-MM-dd'))
 }
@@ -164,18 +171,19 @@ if (Test-Path -LiteralPath $OutputPath -PathType Container) {
 Write-Host "Inventur von $env:COMPUTERNAME ..."
 
 # ---------------------------------------------------------------------------
-# Kopf (YAML-Frontmatter mit Titel, Kunde, Techniker, Datum)
+# Kopf: Überschrift und Eckdaten der Inventur
 # ---------------------------------------------------------------------------
 
-$title = "Inventur $env:COMPUTERNAME"
-Add-Line '---'
-Add-Line ('title: "{0}"' -f $title)
-if ($Kunde) { Add-Line ('subtitle: "{0}"' -f ($Kunde -replace '"', "'")) }
-if ($Techniker) { Add-Line ('author: "{0}"' -f ($Techniker -replace '"', "'")) }
-Add-Line ('date: "{0}"' -f $now.ToString('dd.MM.yyyy HH:mm'))
-Add-Line 'lang: de-DE'
-Add-Line '---'
+Add-Line "# Inventur $env:COMPUTERNAME"
 Add-Line
+$kopf = [ordered]@{}
+if ($Kunde) { $kopf['Kunde'] = $Kunde }
+if ($Techniker) { $kopf['Techniker'] = $Techniker }
+$kopf['Erfasst am'] = $now
+$kopf['Skriptversion'] = $ScriptVersion
+$kopfSpalten = [ordered]@{}
+foreach ($k in $kopf.Keys) { $kopfSpalten[$k] = $k }
+Add-Table @([pscustomobject]$kopf) $kopfSpalten
 
 $headerIndex = $script:md.Count   # Hinweise werden später hier eingefügt
 
@@ -191,27 +199,28 @@ Invoke-Section 'Übersicht' {
     $uptime = $now - $os.LastBootUpTime
 
     $data = [ordered]@{}
-    if ($Kunde) { $data['Kunde'] = $Kunde }
     $data['Rechnername']        = $env:COMPUTERNAME
     $data['Hersteller']         = $cs.Manufacturer
     $data['Modell']             = $cs.Model
     if ($csp -and $csp.Version -and $csp.Version -notmatch 'System Version|To be filled') { $data['Modellbezeichnung'] = $csp.Version }
     $data['Seriennummer']       = $bios.SerialNumber
     if ($csp -and $csp.UUID) { $data['UUID'] = $csp.UUID }
-    $data['Gerätetyp']         = switch ($cs.PCSystemType) { 1 { 'Desktop' } 2 { 'Notebook' } 3 { 'Workstation' } 4 { 'Server' } 8 { 'Tablet' } default { 'unbekannt' } }
+    # PCSystemTypeEx statt PCSystemType: nur dort steht 8 für Tablet (Slate)
+    $data['Gerätetyp']         = switch ($cs.PCSystemTypeEx) {
+        1 { 'Desktop' } 2 { 'Notebook' } 3 { 'Workstation' } { $_ -in 4, 5, 7 } { 'Server' }
+        6 { 'Appliance' } 8 { 'Tablet' } default { 'unbekannt' }
+    }
     $data['Betriebssystem']     = $os.Caption
     $data['Version']            = $displayVersion
     $data['Build']              = $build
     $data['Architektur']        = $os.OSArchitecture
-    $data['Systemsprache']      = (Get-Culture).Name
+    # Installationssprache von Windows, nicht das Regionsformat des ausführenden Kontos
+    $data['Systemsprache']      = $(try { [Globalization.CultureInfo]::GetCultureInfo([int]$os.OSLanguage).Name } catch { "$($os.OSLanguage)" })
     $data['Installiert am']     = $os.InstallDate
     $data['Letzter Start']      = $os.LastBootUpTime
     $data['Laufzeit']           = '{0} Tage {1} Std.' -f $uptime.Days, $uptime.Hours
     $data['Angemeldeter Benutzer'] = $cs.UserName
-    if ($Techniker) { $data['Techniker'] = $Techniker }
     $data['Ausgeführt als']     = '{0}\{1}' -f $env:USERDOMAIN, $env:USERNAME
-    $data['Erfasst am']         = $now
-    $data['Skriptversion']      = $ScriptVersion
     Add-KeyValueTable $data
 }
 
@@ -466,7 +475,8 @@ Invoke-Section 'Virenschutz' -Level 3 {
 }
 
 Invoke-Section 'Firewall' -Level 3 {
-    Add-Table (Get-NetFirewallProfile -ErrorAction Stop) ([ordered]@{
+    # ActiveStore = tatsächlich wirksame Einstellungen inkl. Gruppenrichtlinien
+    Add-Table (Get-NetFirewallProfile -PolicyStore ActiveStore -ErrorAction Stop) ([ordered]@{
         'Profil'      = 'Name'
         'Aktiv'       = { param($f) "$($f.Enabled)" -eq 'True' }
         'Eingehend'   = 'DefaultInboundAction'
@@ -503,7 +513,7 @@ Invoke-Section 'Domäne & Anmeldung' -Level 3 {
     $data = [ordered]@{}
     if ($cs.PartOfDomain) { $data['AD-Domäne'] = $cs.Domain } else { $data['Arbeitsgruppe'] = $cs.Workgroup }
     try {
-        $ds = & "$env:SystemRoot\System32\dsregcmd.exe" /status 2>$null
+        $ds = & (Join-Path ([Environment]::SystemDirectory) 'dsregcmd.exe') /status 2>$null
         $get = { param($k) $l = $ds | Where-Object { $_ -match "^\s*$k\s*:" } | Select-Object -First 1; if ($l) { ($l -split ':', 2)[1].Trim() } }
         $yesNo = { param($v) switch ($v) { 'YES' { 'Ja' } 'NO' { 'Nein' } default { $v } } }
         $data['Entra ID (Azure AD) beigetreten'] = & $yesNo (& $get 'AzureAdJoined')
@@ -583,7 +593,7 @@ Invoke-Section 'Programme' -Level 3 {
     )
     # Benutzerinstallationen aller aktuell geladenen Profile (u. a. angemeldeter Benutzer)
     Get-ChildItem 'Registry::HKEY_USERS' -ErrorAction SilentlyContinue |
-        Where-Object { $_.PSChildName -match '^S-1-5-21-[\d-]+$' } | ForEach-Object {
+        Where-Object { $_.PSChildName -match '^S-1-(5-21|12-1)-[\d-]+$' } | ForEach-Object {   # 12-1 = Entra-ID-Konten
             $sidStr = $_.PSChildName
             $user = $sidStr
             try { $user = (New-Object System.Security.Principal.SecurityIdentifier($sidStr)).Translate([System.Security.Principal.NTAccount]).Value } catch { }
@@ -648,7 +658,7 @@ if ($script:hinweise.Count -gt 0) {
 }
 
 $dir = Split-Path -Parent $OutputPath
-if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 [System.IO.File]::WriteAllLines($OutputPath, $script:md, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ''

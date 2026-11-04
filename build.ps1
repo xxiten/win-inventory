@@ -15,9 +15,11 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $exe = Join-Path $dist 'Inventur.exe'
 
 # Die Version steht nur in $ScriptVersion im Skript; daraus wird die Exe-Version.
-$line = Select-String -Path "$root\Invoke-Inventur.ps1" -Pattern "^\`$ScriptVersion = '(.+)'" | Select-Object -First 1
+$line = Select-String -LiteralPath "$root\Invoke-Inventur.ps1" -Pattern "^\`$ScriptVersion = '([^']+)'" | Select-Object -First 1
 if (-not $line) { throw '$ScriptVersion in Invoke-Inventur.ps1 nicht gefunden.' }
 $version = $line.Matches[0].Groups[1].Value
+# Exe-Versionen sind rein numerisch; drei Stellen, damit Fusszeile, Report und Tag gleich lauten
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "`$ScriptVersion '$version' muss das Format x.y.z haben." }
 $versionCs = Join-Path $env:TEMP "win-inventory-version-$PID.cs"
 "[assembly: System.Reflection.AssemblyVersion(""$version"")]" | Set-Content -Path $versionCs -Encoding ASCII
 
@@ -26,7 +28,8 @@ try {
         "/win32manifest:$root\src\app.manifest" `
         "/win32icon:$root\src\app.ico" `
         "/resource:$root\Invoke-Inventur.ps1,Invoke-Inventur.ps1" `
-        "/resource:$root\src\app.ico,app.ico" `
+        "/resource:$root\LICENSE,LICENSE.txt" `
+        "/resource:$root\THIRD-PARTY-NOTICES.md,THIRD-PARTY-NOTICES.md" `
         /reference:System.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll `
         "/out:$exe" `
         "$root\src\InventurLauncher.cs" $versionCs

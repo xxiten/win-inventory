@@ -6,13 +6,14 @@
 // einen Temp-Ordner geschrieben und mit Windows PowerShell 5.1 ausgefuehrt.
 
 using System;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -55,8 +56,9 @@ namespace WinInventory
         Label lblStatus;
 
         Process proc;
-        string tempScript;
+        string tempDir;
         string reportPath;
+        IntPtr smallIcon;
 
         public MainForm()
         {
@@ -68,17 +70,15 @@ namespace WinInventory
             AutoScaleMode = AutoScaleMode.Dpi;
             Text = Product + " – " + Environment.MachineName;
             Font = SystemFonts.MessageBoxFont;
-            // Datei-Icon der Exe kommt per /win32icon; das Fenster braucht es als Ressource,
-            // damit Titel- und Taskleiste jeweils die passende Groesse bekommen.
-            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("app.ico"))
-            {
-                Icon = new Icon(s);
-            }
+            LoadWindowIcons();
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(620, 520);
             MinimumSize = new Size(520, 440);
             BuildLayout();
-            ResumeLayout();
+            // Designer-Muster: ResumeLayout(false) richtet die Anker aller Controls ein,
+            // bevor PerformLayout mit dem DPI-Faktor skaliert.
+            ResumeLayout(false);
+            PerformLayout();
 
             txtTechniker.Text = LoadSetting("Techniker");
             txtOrdner.Text = DefaultFolder();
@@ -89,6 +89,24 @@ namespace WinInventory
         // -------------------------------------------------------------------
         // Oberflaeche
         // -------------------------------------------------------------------
+
+        void LoadWindowIcons()
+        {
+            // Das Icon steckt nur einmal in der Exe (/win32icon). Gross- und Kleinbild in
+            // den Groessen holen, die Windows bei der aktuellen Skalierung erwartet.
+            IntPtr large, small;
+            int sizes = SystemInformation.IconSize.Width | (SystemInformation.SmallIconSize.Width << 16);
+            if (SHDefExtractIcon(Application.ExecutablePath, 0, 0, out large, out small, sizes) != 0) return;
+            if (large != IntPtr.Zero) Icon = Icon.FromHandle(large);
+            smallIcon = small;
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            // WinForms rechnet das Kleinbild sonst aus dem grossen Icon herunter.
+            if (smallIcon != IntPtr.Zero) SendMessage(Handle, WM_SETICON, (IntPtr)ICON_SMALL, smallIcon);
+        }
 
         void BuildLayout()
         {
@@ -267,9 +285,9 @@ namespace WinInventory
 
         void OnStart(object sender, EventArgs e)
         {
-            string kunde = Clean(txtKunde.Text);
-            string techniker = Clean(txtTechniker.Text);
-            string ordner = txtOrdner.Text.Trim();
+            string kunde = txtKunde.Text.Trim();
+            string techniker = txtTechniker.Text.Trim();
+            string ordner = NormalizeFolder(txtOrdner.Text);
 
             if (kunde.Length == 0 &&
                 MessageBox.Show(this, "Es ist kein Kunde eingetragen. Trotzdem fortfahren?", Text,
@@ -297,15 +315,16 @@ namespace WinInventory
 
             try
             {
-                tempScript = Path.Combine(Path.GetTempPath(), "win-inventory-" + Guid.NewGuid().ToString("N") + ".ps1");
+                tempDir = CreatePrivateTempDir();
+                string script = Path.Combine(tempDir, ResourceName);
                 using (Stream res = Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourceName))
-                using (FileStream f = File.Create(tempScript))
+                using (FileStream f = File.Create(script))
                 {
                     res.CopyTo(f);
                 }
 
                 StringBuilder args = new StringBuilder();
-                args.Append("-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ").Append(Quote(tempScript));
+                args.Append("-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ").Append(Quote(script));
                 args.Append(" -OutputPath ").Append(Quote(reportPath));
                 if (kunde.Length > 0) args.Append(" -Kunde ").Append(Quote(kunde));
                 if (techniker.Length > 0) args.Append(" -Techniker ").Append(Quote(techniker));
@@ -320,6 +339,10 @@ namespace WinInventory
                 psi.RedirectStandardError = true;
                 psi.StandardOutputEncoding = oem;
                 psi.StandardErrorEncoding = oem;
+                // Nur Systemmodule laden. Sonst steht der Dokumente-Ordner des Benutzers vorne im
+                // Modulpfad, und dort abgelegte Module koennten Befehle wie Get-CimInstance ersetzen.
+                psi.EnvironmentVariables["PSModulePath"] =
+                    Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\Modules");
 
                 proc = new Process();
                 proc.StartInfo = psi;
@@ -341,6 +364,7 @@ namespace WinInventory
             {
                 SetRunning(false);
                 CleanupTemp();
+                proc = null;
                 lblStatus.Text = "Start fehlgeschlagen.";
                 Log(ex.Message);
             }
@@ -369,22 +393,25 @@ namespace WinInventory
             });
         }
 
-        void OnOpenReport(object sender, EventArgs e)
-        {
-            try { Process.Start(reportPath); }
-            catch (Win32Exception) { Process.Start("notepad.exe", Quote(reportPath)); }
-        }
+        void OnOpenReport(object sender, EventArgs e) { OpenWithShell(Quote(reportPath)); }
 
-        void OnOpenFolder(object sender, EventArgs e)
-        {
-            Process.Start("explorer.exe", "/select," + Quote(reportPath));
-        }
+        void OnOpenFolder(object sender, EventArgs e) { OpenWithShell("/select," + Quote(reportPath)); }
 
-        void OnWebsite(object sender, LinkLabelLinkClickedEventArgs e)
+        void OnWebsite(object sender, LinkLabelLinkClickedEventArgs e) { OpenWithShell("https://" + Website); }
+
+        void OpenWithShell(string args)
         {
-            // Ueber explorer.exe, damit der Browser nicht mit den Adminrechten
-            // dieses Prozesses startet.
-            Process.Start("explorer.exe", "https://" + Website);
+            // Immer ueber explorer.exe: Editor, Ordnerfenster und Browser laufen dann ohne
+            // die Adminrechte dieses Prozesses.
+            try
+            {
+                string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+                using (Process.Start(explorer, args)) { }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         void OnFormClosing(object sender, FormClosingEventArgs e)
@@ -425,11 +452,50 @@ namespace WinInventory
             catch (Exception) { return Encoding.Default; }
         }
 
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        static extern int SHDefExtractIcon(string iconFile, int index, uint flags,
+                                           out IntPtr large, out IntPtr small, int sizes);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        const int WM_SETICON = 0x80;
+        const int ICON_SMALL = 0;
+
         static string DefaultFolder()
         {
-            string exeDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
+            // GetDirectoryName laesst "E:\" stehen; ein abgeschnittenes "E:" waere relativ.
+            string exeDir = Path.GetDirectoryName(Application.ExecutablePath);
             if (IsWritable(exeDir)) return exeDir;
             return Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        }
+
+        static string NormalizeFolder(string dir)
+        {
+            dir = (dir ?? "").Trim();
+            // "E:" allein meint das Laufwerk, nicht den aktuellen Ordner auf E:
+            if (dir.Length == 2 && dir[1] == ':') dir += "\\";
+            try { return Path.GetFullPath(dir); }
+            catch (Exception) { return dir; }
+        }
+
+        static string CreatePrivateTempDir()
+        {
+            // Das Skript laeuft mit Adminrechten. Im %TEMP% des Benutzers koennte ein Prozess
+            // ohne Adminrechte es zwischen Schreiben und Start austauschen. Darum ein eigener
+            // Ordner unter Windows\Temp, auf den nur SYSTEM und Administratoren zugreifen.
+            DirectorySecurity sec = new DirectorySecurity();
+            sec.SetAccessRuleProtection(true, false);
+            foreach (WellKnownSidType sid in new[] { WellKnownSidType.LocalSystemSid, WellKnownSidType.BuiltinAdministratorsSid })
+            {
+                sec.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(sid, null),
+                    FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                    PropagationFlags.None, AccessControlType.Allow));
+            }
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                                      @"Temp\win-inventory-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir, sec);
+            return dir;
         }
 
         static bool IsWritable(string dir)
@@ -445,22 +511,29 @@ namespace WinInventory
             catch { return false; }
         }
 
-        static string Clean(string s)
-        {
-            // Anfuehrungszeichen wuerden die Kommandozeile brechen
-            return (s ?? "").Replace("\"", "").Trim();
-        }
-
         static string Quote(string s)
         {
-            return "\"" + s + "\"";
+            // Regeln der Windows-Kommandozeile: Backslashes direkt vor einem " (auch dem
+            // schliessenden) verdoppeln, ein " selbst als \" schreiben.
+            StringBuilder sb = new StringBuilder("\"");
+            int backslashes = 0;
+            foreach (char c in s)
+            {
+                if (c == '\\') { backslashes++; continue; }
+                if (c == '"') sb.Append('\\', backslashes * 2 + 1);
+                else sb.Append('\\', backslashes);
+                sb.Append(c);
+                backslashes = 0;
+            }
+            sb.Append('\\', backslashes * 2);
+            return sb.Append('"').ToString();
         }
 
         void CleanupTemp()
         {
-            if (tempScript == null) return;
-            try { File.Delete(tempScript); } catch { }
-            tempScript = null;
+            if (tempDir == null) return;
+            try { Directory.Delete(tempDir, true); } catch { }
+            tempDir = null;
         }
 
         static string LoadSetting(string name)
