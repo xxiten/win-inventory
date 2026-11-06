@@ -21,6 +21,10 @@ Benutzer, Lizenz und installierte Software und schreibt alles in einen sauberen 
 Standard-Zielordner ist der Ordner der Exe, also z. B. der USB-Stick. Ist der schreibgeschützt,
 wird der Desktop vorgeschlagen. Der Dateiname ist `Inventur_<RECHNER>_<Datum>.md`.
 
+Gibt es eine neuere Version, zeigt die Exe oben einen gelben Hinweis. *Herunterladen* lädt die
+neue `Inventur.exe` über den Browser, *Was ist neu?* öffnet die Release-Notes. Ohne Internet
+erscheint einfach kein Hinweis.
+
 > Die Exe ist **nicht digital signiert**. Windows zeigt deshalb bei der UAC-Abfrage
 > „Unbekannter Herausgeber“, und SmartScreen kann beim ersten Start warnen
 > (*Weitere Informationen → Trotzdem ausführen*). Mit einem Code-Signing-Zertifikat
@@ -111,6 +115,10 @@ Den Rest erledigt GitHub Actions (`.github/workflows/build.yml`):
 Der Report enthält Seriennummern, Benutzernamen und den Entra-Mandanten. Er ist wie andere
 Kundendokumentation zu behandeln. Produktschlüssel werden standardmäßig maskiert, und
 erzeugte Reports (`Inventur_*`) sind per `.gitignore` vom Repo ausgeschlossen.
+
+Das Tool überträgt keine Inventurdaten. Die einzige Netzwerkverbindung ist die Versionsabfrage
+der Exe beim Start: ein Abruf der Release-Liste bei GitHub, wie ein Browseraufruf. GitHub sieht
+dabei nur die öffentliche IP-Adresse des Standorts.
 
 ## Status
 

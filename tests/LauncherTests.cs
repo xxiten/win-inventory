@@ -52,6 +52,7 @@ namespace WinInventory
             string work = args[0];
             TestQuote(work);
             TestFolders();
+            TestUpdateCheck();
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -105,6 +106,22 @@ namespace WinInventory
             Check("NormalizeFolder E:", @"E:\", (string)Call("NormalizeFolder", "E:"));
             Check("NormalizeFolder mit Leerzeichen", @"C:\Temp\", (string)Call("NormalizeFolder", @"  C:\Temp\  "));
             Check("Exe-Ordner im Laufwerksstamm", @"E:\", Path.GetDirectoryName(@"E:\Inventur.exe"));
+        }
+
+        // Versionspruefung ohne Netz: Antwort der GitHub-API auswerten und vergleichen
+        static void TestUpdateCheck()
+        {
+            Check("Tag aus API-Antwort", "v0.9.1",
+                  (string)Call("ParseLatestTag", "{\"url\":\"x\",\"tag_name\": \"v0.9.1\",\"name\":\"v0.9.1\"}"));
+            Check("Tag mit Zusatz wird verworfen", null, (string)Call("ParseLatestTag", "{\"tag_name\":\"v1.0.0-rc1\"}"));
+            Check("Tag mit fremden Zeichen wird verworfen", null, (string)Call("ParseLatestTag", "{\"tag_name\":\"v1.0.0\\\" & calc\"}"));
+            Check("Leere Antwort", null, (string)Call("ParseLatestTag", (object)null));
+            Version current = new Version(0, 9, 0, 0);
+            Check("0.9.1 ist neuer als 0.9.0", "True", Call("IsNewer", "v0.9.1", current).ToString());
+            Check("1.0.0 ist neuer als 0.9.0", "True", Call("IsNewer", "v1.0.0", current).ToString());
+            Check("0.9.0 ist nicht neuer als 0.9.0", "False", Call("IsNewer", "v0.9.0", current).ToString());
+            Check("0.8.4 ist nicht neuer als 0.9.0", "False", Call("IsNewer", "v0.8.4", current).ToString());
+            Check("0.10.0 ist neuer als 0.9.0", "True", Call("IsNewer", "v0.10.0", current).ToString());
         }
 
         static void TestIcons()

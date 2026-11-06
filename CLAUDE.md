@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A read-only inventory tool for Windows 10/11 PCs. `Invoke-Inventur.ps1` collects hardware, security, user/license and software data and writes a German Markdown report (`Inventur_<RECHNER>_<yyyy-MM-dd>.md`). Producing that clean Markdown file is the whole job. Converting it to HTML/PDF is out of scope. It must run on a stock Windows install: Windows PowerShell 5.1, no modules, no internet, no changes to the system.
+A read-only inventory tool for Windows 10/11 PCs. `Invoke-Inventur.ps1` collects hardware, security, user/license and software data and writes a German Markdown report (`Inventur_<RECHNER>_<yyyy-MM-dd>.md`). Producing that clean Markdown file is the whole job. Converting it to HTML/PDF is out of scope. It must run on a stock Windows install: Windows PowerShell 5.1, no modules, no internet, no changes to the system. The script never touches the network. The only network access is the launcher's optional update check (see below), and it must stay silent when offline.
 
 Everything user-facing (report text, GUI, README, code comments, commit messages) is in German.
 
@@ -45,6 +45,7 @@ Three entry points all end up running `Invoke-Inventur.ps1`:
    - **Opening things:** report, folder and website all go through `explorer.exe` (`OpenWithShell`), so the editor or browser doesn't run elevated.
    - **Icon:** it is embedded once, via `/win32icon`. The window loads the large and small icon from the exe with `SHDefExtractIcon`.
    - **Remembered setting:** the technician name is stored under `HKCU\Software\win-inventory`.
+   - **Update check:** `StartUpdateCheck` runs on a ThreadPool thread from `OnLoad`. It calls `api.github.com/repos/<Repo>/releases/latest` with a 5 s timeout, forces TLS 1.2 (a csc build without a TargetFramework would default to TLS 1.0) and uses the system proxy. Every exception is swallowed. `ParseLatestTag` only accepts a strict `vX.Y.Z`, because the download and release URLs are built from it. If the tag is newer, a yellow `LinkLabel` row appears. Its links open through `explorer.exe`, so the browser downloads the new exe. There is deliberately no self-update: an unsigned exe that downloads and replaces executables looks like malware to AV heuristics.
 2. **`Start-Inventur.cmd`** checks for admin rights with `fltmc` (`net session` breaks when the Server service is off) and elevates itself first. Then it prompts for customer and station, so the input isn't lost during the UAC restart. It strips `"` and trailing `\` from both (`:bereinigen`) and calls PowerShell by full path with the same pinned `PSModulePath`.
 3. **Direct call** with parameters.
 

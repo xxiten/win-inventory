@@ -7,6 +7,14 @@ neuen Hauptversion oder, wenn nur etwas dazukommt, mit einer neuen Nebenversion.
 
 Der Release-Workflow übernimmt den Abschnitt der jeweiligen Version als Release-Notes.
 
+## [0.9.1] – 2026-11-06
+
+### Neu
+- Hinweis auf neue Versionen: Die Exe fragt beim Start im Hintergrund bei GitHub nach der
+  neuesten Version. Gibt es eine neuere, erscheint oben im Fenster ein Hinweis mit
+  „Herunterladen“ (lädt die neue `Inventur.exe` über den Browser) und „Was ist neu?“.
+  Ohne Internet bleibt der Hinweis einfach aus. Inventurdaten werden dabei nicht übertragen.
+
 ## [0.9.0] – 2026-11-04
 
 ### Neu

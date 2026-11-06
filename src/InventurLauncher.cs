@@ -10,11 +10,14 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -48,12 +51,14 @@ namespace WinInventory
         // Herkunft von app.ico, Details in THIRD-PARTY-NOTICES.md
         internal const string IconCredit = "Icon: Fluent Emoji © Microsoft Corporation (MIT)";
         const string Website = "www.netixx.it";
+        const string Repo = "xxiten/win-inventory";
 
         TextBox txtKunde, txtStation, txtTechniker, txtOrdner, txtLog;
         CheckBox chkStore, chkKey;
         Button btnStart, btnBrowse, btnOpen, btnFolder;
         ProgressBar progress;
         Label lblStatus;
+        LinkLabel lnkUpdate;
 
         Process proc;
         string tempDir;
@@ -108,6 +113,78 @@ namespace WinInventory
             if (smallIcon != IntPtr.Zero) SendMessage(Handle, WM_SETICON, (IntPtr)ICON_SMALL, smallIcon);
             // Grauer Beispieltext im leeren Feld
             SendMessage(txtStation.Handle, EM_SETCUEBANNER, (IntPtr)1, "z. B. PC Sonja oder Empfang 1");
+            StartUpdateCheck();
+        }
+
+        // -------------------------------------------------------------------
+        // Hinweis auf neue Version
+        // -------------------------------------------------------------------
+
+        void StartUpdateCheck()
+        {
+            // Im Hintergrund, damit das Fenster nie auf das Netz wartet. Ohne Internet,
+            // hinter einer Firewall oder bei jedem anderen Fehler bleibt der Hinweis einfach aus.
+            Version current = Assembly.GetExecutingAssembly().GetName().Version;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    string tag = ParseLatestTag(FetchLatestRelease());
+                    if (tag == null || !IsNewer(tag, current)) return;
+                    BeginInvoke((MethodInvoker)delegate { ShowUpdate(tag); });
+                }
+                catch (Exception) { }   // auch wenn das Fenster inzwischen geschlossen ist
+            });
+        }
+
+        static string FetchLatestRelease()
+        {
+            // Ohne TargetFramework-Angabe (csc-Build) nimmt .NET sonst nur TLS 1.0
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://api.github.com/repos/" + Repo + "/releases/latest");
+            req.UserAgent = "win-inventory-launcher";
+            req.Accept = "application/vnd.github+json";
+            req.Timeout = 5000;
+            req.ReadWriteTimeout = 5000;
+            if (req.Proxy != null) req.Proxy.Credentials = CredentialCache.DefaultCredentials;
+            using (WebResponse resp = req.GetResponse())
+            using (StreamReader r = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+            {
+                return r.ReadToEnd();
+            }
+        }
+
+        static string ParseLatestTag(string json)
+        {
+            // Nur ein streng geformtes "vX.Y.Z" akzeptieren; daraus werden unten URLs gebaut.
+            Match m = Regex.Match(json ?? "", "\"tag_name\"\\s*:\\s*\"(v\\d{1,4}\\.\\d{1,4}\\.\\d{1,4})\"");
+            return m.Success ? m.Groups[1].Value : null;
+        }
+
+        static bool IsNewer(string tag, Version current)
+        {
+            // Die Exe-Version hat vier Stellen (x.y.z.0), Tags drei: nur x.y.z vergleichen
+            Version latest = new Version(tag.Substring(1));
+            return latest > new Version(current.Major, current.Minor, Math.Max(current.Build, 0));
+        }
+
+        void ShowUpdate(string tag)
+        {
+            string text = "Neue Version " + tag.Substring(1) + " verfügbar.   ";
+            string download = "Herunterladen", notes = "Was ist neu?";
+            lnkUpdate.Text = text + download + "  ·  " + notes;
+            lnkUpdate.Links.Clear();
+            lnkUpdate.Links.Add(text.Length, download.Length,
+                "https://github.com/" + Repo + "/releases/download/" + tag + "/Inventur.exe");
+            lnkUpdate.Links.Add(lnkUpdate.Text.Length - notes.Length, notes.Length,
+                "https://github.com/" + Repo + "/releases/tag/" + tag);
+            lnkUpdate.Visible = true;
+        }
+
+        void OnUpdateLink(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            // Der Browser laedt die Exe herunter; ueber explorer.exe ohne Adminrechte
+            OpenWithShell((string)e.Link.LinkData);
         }
 
         void BuildLayout()
@@ -120,6 +197,19 @@ namespace WinInventory
             t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             int row = 0;
+
+            // Erst sichtbar, wenn es eine neuere Version gibt; bis dahin hat die Zeile keine Hoehe
+            lnkUpdate = new LinkLabel();
+            lnkUpdate.Visible = false;
+            lnkUpdate.AutoSize = true;
+            lnkUpdate.Dock = DockStyle.Fill;
+            lnkUpdate.Padding = new Padding(8, 6, 8, 6);
+            lnkUpdate.Margin = new Padding(3, 0, 3, 10);
+            lnkUpdate.BackColor = SystemColors.Info;
+            lnkUpdate.ForeColor = SystemColors.InfoText;
+            lnkUpdate.LinkClicked += OnUpdateLink;
+            t.Controls.Add(lnkUpdate, 0, row++);
+            t.SetColumnSpan(lnkUpdate, 3);
 
             Label intro = new Label();
             intro.Text = "Erfasst Hardware, Sicherheit, Benutzer, Lizenz und installierte Software " +
