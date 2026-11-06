@@ -87,16 +87,29 @@ jobs:
           $start = @(0..($log.Count - 1) | Where-Object { $log[$_] -match ('^## \[' + [regex]::Escape($version) + '\]') })[0]
           if ($null -eq $start) { throw "CHANGELOG.md hat keinen Abschnitt fuer $version." }
           $end = @(($start + 1)..($log.Count - 1) | Where-Object { $log[$_] -match '^## \[' }) + $log.Count | Select-Object -First 1
-          if ($end -le $start + 1) { throw "Der Abschnitt fuer $version in CHANGELOG.md ist leer." }
+          $body = @()
+          if ($end -gt $start + 1) { $body = @($log[($start + 1)..($end - 1)]) }
+          if (-not ($body | Where-Object { $_.Trim() })) { throw "Der Abschnitt fuer $version in CHANGELOG.md ist leer." }
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
-          [IO.File]::WriteAllLines($notes, [string[]]$log[($start + 1)..($end - 1)], (New-Object Text.UTF8Encoding $false))
-          # Die Releases-API antwortet gelegentlich mit HTTP 502; dann bis zu dreimal versuchen
-          # und einen halb angelegten Entwurf vorher entfernen.
+          [IO.File]::WriteAllLines($notes, [string[]]$body, (New-Object Text.UTF8Encoding $false))
+          # Ein veroeffentlichtes Release nie anfassen; entfernt werden nur Entwuerfe, die ein
+          # abgebrochener Versuch hinterlassen hat.
+          function Get-Release { (gh release list --limit 100 --json tagName,isDraft | ConvertFrom-Json) | Where-Object { $_.tagName -eq $tag } }
+          $r = Get-Release
+          if ($r -and -not $r.isDraft) { throw "Release $tag existiert bereits." }
+          # Die Releases-API antwortet gelegentlich mit HTTP 502; dann bis zu dreimal versuchen.
           for ($i = 1; $i -le 3; $i++) {
+            if ($r) { gh release delete $tag --yes }
             gh release create $tag $exe.FullName --target $env:GITHUB_SHA --title $tag --notes-file $notes
             if ($LASTEXITCODE -eq 0) { break }
-            if ($i -eq 3) { throw 'Release fehlgeschlagen.' }
-            Write-Host "Versuch $i fehlgeschlagen, neuer Versuch in 20 Sekunden."
-            gh release delete $tag --yes
             Start-Sleep -Seconds 20
+            $r = Get-Release
+            if ($r -and -not $r.isDraft) {
+              # Trotz Fehlermeldung veroeffentlicht: sicherstellen, dass die Exe dranhaengt
+              gh release upload $tag $exe.FullName --clobber
+              if ($LASTEXITCODE -ne 0) { throw 'Exe konnte nicht hochgeladen werden.' }
+              break
+            }
+            if ($i -eq 3) { throw 'Release fehlgeschlagen.' }
+            Write-Host "Versuch $i fehlgeschlagen, neuer Versuch."
           }

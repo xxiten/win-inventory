@@ -11,6 +11,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace WinInventory
 {
@@ -50,7 +51,8 @@ namespace WinInventory
         static int Main(string[] args)
         {
             string work = args[0];
-            TestQuote(work);
+            TestStartInfo(work);
+            TestQuote();
             TestFolders();
             TestUpdateCheck();
 
@@ -59,52 +61,69 @@ namespace WinInventory
             TestIcons();
 
             bool admin = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
-            if (admin) TestInventoryRun(work);
+            if (admin) WithSavedTechniker(delegate { TestInventoryRun(work); });
             else Console.WriteLine("--      Inventurlauf ueber die Exe uebersprungen (keine Adminrechte)");
 
             return failures;
         }
 
-        // Werte muessen unveraendert bei PowerShell 5.1 (-File) ankommen.
-        static void TestQuote(string work)
+        // BuildStartInfo: Werte muessen unveraendert bei PowerShell 5.1 ankommen, Schalter nur
+        // wenn gewuenscht, und der Exit-Code muss Erfolg und Abbruch unterscheiden.
+        static void TestStartInfo(string work)
         {
             string echo = Path.Combine(work, "echo.ps1");
             string outFile = Path.Combine(work, "echo-out.txt");
             File.WriteAllText(echo,
-                "param($OutputPath, $Kunde, $Station, [switch]$IncludeProductKey)\r\n" +
-                "[IO.File]::WriteAllText('" + outFile + "', ($Kunde, $Station, $OutputPath, [string]$IncludeProductKey -join \"`n\"), [Text.Encoding]::UTF8)\r\n",
+                "param($OutputPath, $Kunde, $Station, $Techniker, [switch]$NoStoreApps, [switch]$IncludeProductKey)\r\n" +
+                "$ErrorActionPreference = 'Stop'\r\n" +
+                "[IO.File]::WriteAllText('" + outFile + "', ($Kunde, $Station, $Techniker, $OutputPath, " +
+                "[string]$NoStoreApps, [string]$IncludeProductKey -join \"`n\"), [Text.Encoding]::UTF8)\r\n" +
+                "Write-Error 'nicht kritisch' -ErrorAction Continue\r\n" +
+                "if ($Kunde -eq 'ABBRUCH') { throw 'Abbruch' }\r\n",
                 new UTF8Encoding(true));
             string[][] cases = {
-                new[] { "Muster\\", "Max" },
-                new[] { "\"Zur Post\" GmbH", "NETIXX\\moberleiter" },
-                new[] { "a\\\"b", "x y\\\\" },
-                new[] { "M\u00fcller & S\u00f6hne $(calc) `n", "\u00dcnal ' ; -IncludeProductKey" },
+                new[] { "Muster\\", "Max", "" },
+                new[] { "\"Zur Post\" GmbH", "NETIXX\\moberleiter", "x y\\\\" },
+                new[] { "-IncludeProductKey", "-S", "-Verbose" },
+                new[] { "M\u00fcller & S\u00f6hne $(calc) `n", "\u00dcnal ' ; -IncludeProductKey", "a\\\"b" },
             };
             int i = 0;
             foreach (string[] c in cases)
             {
                 i++;
-                string a = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Call("Quote", echo) +
-                           " -OutputPath " + Call("Quote", @"C:\Temp\x.md") +
-                           " -Kunde " + Call("Quote", c[0]) + " -Station " + Call("Quote", c[1]);
-                if (File.Exists(outFile)) File.Delete(outFile);
-                ProcessStartInfo psi = new ProcessStartInfo(
-                    Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"), a);
-                psi.UseShellExecute = false;
+                bool switches = i == 2;
+                ProcessStartInfo psi = (ProcessStartInfo)Call("BuildStartInfo", echo, @"C:\Temp\x.md", c[0], c[1], c[2], switches, switches);
                 psi.CreateNoWindow = true;
-                using (Process p = Process.Start(psi)) p.WaitForExit();
-                string[] got = File.Exists(outFile) ? File.ReadAllText(outFile, Encoding.UTF8).Split('\n') : new string[4];
-                Check("Quote Fall " + i + " erster Wert", c[0], got[0]);
-                Check("Quote Fall " + i + " zweiter Wert", c[1], got[1]);
-                Check("Quote Fall " + i + " OutputPath", @"C:\Temp\x.md", got[2]);
-                Check("Quote Fall " + i + " kein Schalter eingeschleust", "False", got[3]);
+                psi.RedirectStandardError = true;   // das absichtliche Write-Error nicht ins Testprotokoll
+                if (File.Exists(outFile)) File.Delete(outFile);
+                int code;
+                using (Process p = Process.Start(psi)) { p.StandardError.ReadToEnd(); p.WaitForExit(); code = p.ExitCode; }
+                string[] got = File.Exists(outFile) ? File.ReadAllText(outFile, Encoding.UTF8).Split('\n') : new string[6];
+                Check("Start Fall " + i + " Kunde", c[0], got[0]);
+                Check("Start Fall " + i + " Station", c[1], got[1]);
+                Check("Start Fall " + i + " Techniker", c[2], got[2]);
+                Check("Start Fall " + i + " OutputPath", @"C:\Temp\x.md", got[3]);
+                Check("Start Fall " + i + " Schalter", switches + "/" + switches, got[4] + "/" + got[5]);
+                Check("Start Fall " + i + " Exit-Code 0", "0", code.ToString());
             }
+            ProcessStartInfo fail = (ProcessStartInfo)Call("BuildStartInfo", echo, @"C:\Temp\x.md", "ABBRUCH", "", "", false, false);
+            fail.CreateNoWindow = true;
+            fail.RedirectStandardError = true;
+            using (Process p = Process.Start(fail)) { p.StandardError.ReadToEnd(); p.WaitForExit(); Check("Abbruch des Skripts ergibt Exit-Code 1", "1", p.ExitCode.ToString()); }
+        }
+
+        // Quote dient nur noch fuer Pfade an explorer.exe
+        static void TestQuote()
+        {
+            Check("Quote Pfad", "\"C:\\Temp\\x.md\"", (string)Call("Quote", @"C:\Temp\x.md"));
+            Check("Quote Backslash am Ende", "\"E:\\\\\"", (string)Call("Quote", @"E:\"));
         }
 
         static void TestFolders()
         {
             Check("NormalizeFolder E:", @"E:\", (string)Call("NormalizeFolder", "E:"));
             Check("NormalizeFolder mit Leerzeichen", @"C:\Temp\", (string)Call("NormalizeFolder", @"  C:\Temp\  "));
+            Check("NormalizeFolder mit Anfuehrungszeichen", @"C:\Temp", (string)Call("NormalizeFolder", "\"C:\\Temp\""));
             Check("Exe-Ordner im Laufwerksstamm", @"E:\", Path.GetDirectoryName(@"E:\Inventur.exe"));
         }
 
@@ -140,13 +159,14 @@ namespace WinInventory
             Directory.CreateDirectory(target);
             MainForm f = new MainForm();
             ((TextBox)Field(f, "txtKunde")).Text = "CI-Test & Co";
-            ((TextBox)Field(f, "txtStation")).Text = "Empfang \"1\"";
+            ((TextBox)Field(f, "txtStation")).Text = "-Empfang \"1\"";
             ((TextBox)Field(f, "txtTechniker")).Text = "LauncherTests";
             ((TextBox)Field(f, "txtOrdner")).Text = target;
             ((CheckBox)Field(f, "chkStore")).Checked = false;
 
             string tempDir = null;
             bool tempProtected = false;
+            string tempOwner = null;
             string status = "", log = "";
             DateTime start = DateTime.Now;
             Timer poll = new Timer();
@@ -156,7 +176,9 @@ namespace WinInventory
                 if (tempDir == null && Field(f, "tempDir") != null)
                 {
                     tempDir = (string)Field(f, "tempDir");
-                    tempProtected = Directory.GetAccessControl(tempDir).AreAccessRulesProtected;
+                    DirectorySecurity ds = Directory.GetAccessControl(tempDir);
+                    tempProtected = ds.AreAccessRulesProtected;
+                    tempOwner = ds.GetOwner(typeof(SecurityIdentifier)).Value;
                 }
                 bool running = Field(f, "proc") != null;
                 if (running && (DateTime.Now - start).TotalMinutes < 8) return;
@@ -192,14 +214,32 @@ namespace WinInventory
             Check("Temp-Ordner unter Windows\\Temp", "True", tempDir != null &&
                   tempDir.StartsWith(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), StringComparison.OrdinalIgnoreCase) ? "True" : "False");
             Check("Temp-Ordner mit geschuetzten Rechten", "True", tempProtected.ToString());
+            Check("Temp-Ordner gehoert den Administratoren", "S-1-5-32-544", tempOwner);
             Check("Temp-Ordner danach entfernt", "False", (tempDir != null && Directory.Exists(tempDir)).ToString());
             Check("Report geschrieben", "True", File.Exists(report).ToString());
             if (File.Exists(report))
             {
                 string first = File.ReadAllLines(report, Encoding.UTF8)[0];
-                Check("Report-Ueberschrift mit Station", "# Inventur Empfang \"1\" (" + Environment.MachineName + ")", first);
+                Check("Report-Ueberschrift mit Station", "# Inventur -Empfang \"1\" (" + Environment.MachineName + ")", first);
             }
             f.Dispose();
+        }
+
+        // OnStart merkt sich den Techniker in HKCU. Der Test darf den echten Wert nicht ersetzen.
+        static void WithSavedTechniker(Action test)
+        {
+            string key = (string)typeof(MainForm).GetField("SettingsKey", Any).GetValue(null);
+            object original;
+            using (RegistryKey k = Registry.CurrentUser.OpenSubKey(key)) original = k == null ? null : k.GetValue("Techniker");
+            try { test(); }
+            finally
+            {
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(key))
+                {
+                    if (original != null) k.SetValue("Techniker", original);
+                    else k.DeleteValue("Techniker", false);
+                }
+            }
         }
     }
 }

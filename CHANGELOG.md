@@ -7,6 +7,27 @@ neuen Hauptversion oder, wenn nur etwas dazukommt, mit einer neuen Nebenversion.
 
 Der Release-Workflow übernimmt den Abschnitt der jeweiligen Version als Release-Notes.
 
+## [0.9.2] – 2026-11-06
+
+### Behoben
+- Kunde, Station oder Techniker mit „-“ am Anfang brachen die Inventur ab. Die Werte gehen jetzt
+  als Umgebungsvariablen an PowerShell, auch aus `Start-Inventur.cmd`; Anführungszeichen und
+  Backslashes bleiben dabei unverändert.
+- Eingaben nur aus Leerzeichen erzeugten eine leere Station in der Überschrift.
+- Adapter ohne IPv4-Adresse zeigten „/“ in der IPv4-Spalte.
+- Ein in Anführungszeichen eingefügter Ordner („Als Pfad kopieren“) galt als nicht beschreibbar.
+- Fiel der Windows-Lizenzdienst aus, stand im Office-Abschnitt „Nicht verfügbar“ unter
+  gültigen Microsoft-365-Daten.
+
+### Geändert
+- Der Lizenzdienst wird nur noch einmal abgefragt, das spart einige Sekunden je Inventur.
+
+### Sicherheit
+- `[` und `]` in Werten werden entschärft, damit sich keine Links oder Bilder in den Report
+  einschleusen lassen (z. B. über Programmnamen, die jeder Benutzer setzen kann).
+- Der geschützte Temp-Ordner gehört ausdrücklich den Administratoren.
+- Die Versionsabfrage meldet sich nicht mehr mit dem Windows-Konto am Proxy an.
+
 ## [0.9.1] – 2026-11-06
 
 ### Neu

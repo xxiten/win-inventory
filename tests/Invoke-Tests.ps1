@@ -56,6 +56,7 @@ $cases = @(
     @('*fett* _kursiv_',        '\*fett\* \_kursiv\_'),
     @('Code `x`',               'Code \`x\`'),
     @('pfad\*',                 'pfad\\\*'),
+    @('![x](https://e.x/p.png) [Update](https://e.x)', '!\[x\](https://e.x/p.png) \[Update\](https://e.x)'),
     @("Zeile1`r`nZeile2 ",      'Zeile1 Zeile2')
 )
 foreach ($c in $cases) { Assert-Equal "ConvertTo-MdCell $($c[0] -replace '\s+', ' ')" $c[1] (ConvertTo-MdCell $c[0]) }
@@ -97,8 +98,27 @@ if ($ReportPath) {
 if (-not $SkipLauncher) {
     $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
     if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
-    $work = Join-Path ([IO.Path]::GetTempPath()) ('win-inventory-tests-' + [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $work | Out-Null
+    $name = 'win-inventory-tests-' + [guid]::NewGuid().ToString('N')
+    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+             ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($admin) {
+        # Mit Adminrechten laufen Test-Exe und echo.ps1 erhöht. Im %TEMP% des Benutzers könnte ein
+        # Prozess ohne Adminrechte sie vorher austauschen, daher wie im Launcher ein Ordner, auf den
+        # nur SYSTEM und Administratoren zugreifen.
+        $sec = New-Object System.Security.AccessControl.DirectorySecurity
+        $sec.SetOwner((New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')))
+        $sec.SetAccessRuleProtection($true, $false)
+        foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
+            $sec.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+                (New-Object System.Security.Principal.SecurityIdentifier($sid)), 'FullControl',
+                'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+        }
+        $work = Join-Path ([Environment]::GetFolderPath('Windows')) "Temp\$name"
+        [void][IO.Directory]::CreateDirectory($work, $sec)
+    } else {
+        $work = Join-Path ([IO.Path]::GetTempPath()) $name
+        New-Item -ItemType Directory -Path $work | Out-Null
+    }
     try {
         & $csc /nologo /target:exe /platform:anycpu /codepage:65001 `
             "/win32icon:$root\src\app.ico" `

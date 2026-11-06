@@ -146,7 +146,9 @@ namespace WinInventory
             req.Accept = "application/vnd.github+json";
             req.Timeout = 5000;
             req.ReadWriteTimeout = 5000;
-            if (req.Proxy != null) req.Proxy.Credentials = CredentialCache.DefaultCredentials;
+            // Bewusst ohne Anmeldedaten fuer den Proxy: Sonst bekaeme jeder Proxy, den WPAD im
+            // Kundennetz liefert, die Windows-Anmeldung des (Admin-)Kontos. Verlangt ein Proxy
+            // eine Anmeldung, faellt der Hinweis eben aus.
             using (WebResponse resp = req.GetResponse())
             using (StreamReader r = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
             {
@@ -421,27 +423,14 @@ namespace WinInventory
                     res.CopyTo(f);
                 }
 
-                StringBuilder args = new StringBuilder();
-                args.Append("-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ").Append(Quote(script));
-                args.Append(" -OutputPath ").Append(Quote(reportPath));
-                if (kunde.Length > 0) args.Append(" -Kunde ").Append(Quote(kunde));
-                if (station.Length > 0) args.Append(" -Station ").Append(Quote(station));
-                if (techniker.Length > 0) args.Append(" -Techniker ").Append(Quote(techniker));
-                if (!chkStore.Checked) args.Append(" -NoStoreApps");
-                if (chkKey.Checked) args.Append(" -IncludeProductKey");
-
+                ProcessStartInfo psi = BuildStartInfo(script, reportPath, kunde, station, techniker,
+                                                      !chkStore.Checked, chkKey.Checked);
                 Encoding oem = ConsoleEncoding();
-                ProcessStartInfo psi = new ProcessStartInfo(PowerShellPath(), args.ToString());
-                psi.UseShellExecute = false;
                 psi.CreateNoWindow = true;
                 psi.RedirectStandardOutput = true;
                 psi.RedirectStandardError = true;
                 psi.StandardOutputEncoding = oem;
                 psi.StandardErrorEncoding = oem;
-                // Nur Systemmodule laden. Sonst steht der Dokumente-Ordner des Benutzers vorne im
-                // Modulpfad, und dort abgelegte Module koennten Befehle wie Get-CimInstance ersetzen.
-                psi.EnvironmentVariables["PSModulePath"] =
-                    Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\Modules");
 
                 proc = new Process();
                 proc.StartInfo = psi;
@@ -575,7 +564,8 @@ namespace WinInventory
 
         static string NormalizeFolder(string dir)
         {
-            dir = (dir ?? "").Trim();
+            // Anfuehrungszeichen kommen von "Als Pfad kopieren" im Explorer
+            dir = (dir ?? "").Trim().Trim('"').Trim();
             // "E:" allein meint das Laufwerk, nicht den aktuellen Ordner auf E:
             if (dir.Length == 2 && dir[1] == ':') dir += "\\";
             try { return Path.GetFullPath(dir); }
@@ -588,6 +578,9 @@ namespace WinInventory
             // ohne Adminrechte es zwischen Schreiben und Start austauschen. Darum ein eigener
             // Ordner unter Windows\Temp, auf den nur SYSTEM und Administratoren zugreifen.
             DirectorySecurity sec = new DirectorySecurity();
+            // Besitzer ausdruecklich setzen: Je nach Richtlinie waere es sonst der Benutzer, und
+            // der duerfte als Besitzer die Rechte wieder oeffnen.
+            sec.SetOwner(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null));
             sec.SetAccessRuleProtection(true, false);
             foreach (WellKnownSidType sid in new[] { WellKnownSidType.LocalSystemSid, WellKnownSidType.BuiltinAdministratorsSid })
             {
@@ -614,10 +607,35 @@ namespace WinInventory
             catch { return false; }
         }
 
+        static ProcessStartInfo BuildStartInfo(string script, string output, string kunde, string station,
+                                               string techniker, bool noStoreApps, bool includeKey)
+        {
+            // Die Werte gehen ueber Umgebungsvariablen statt ueber die Kommandozeile. So bleibt
+            // jeder Text ein Wert, auch mit Anfuehrungszeichen, Backslash oder "-" am Anfang, und
+            // kann nie als Parameter gelesen werden. "exit 0" macht den Exit-Code eindeutig:
+            // 0 bei Erfolg, 1 wenn das Skript abbricht.
+            string command = "& $env:INVENTUR_SCRIPT -OutputPath $env:INVENTUR_OUTPUT" +
+                             " -Kunde $env:INVENTUR_KUNDE -Station $env:INVENTUR_STATION -Techniker $env:INVENTUR_TECHNIKER" +
+                             (noStoreApps ? " -NoStoreApps" : "") + (includeKey ? " -IncludeProductKey" : "") + "; exit 0";
+            ProcessStartInfo psi = new ProcessStartInfo(PowerShellPath(),
+                "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + command + "\"");
+            psi.UseShellExecute = false;
+            psi.EnvironmentVariables["INVENTUR_SCRIPT"] = script;
+            psi.EnvironmentVariables["INVENTUR_OUTPUT"] = output;
+            psi.EnvironmentVariables["INVENTUR_KUNDE"] = kunde;
+            psi.EnvironmentVariables["INVENTUR_STATION"] = station;
+            psi.EnvironmentVariables["INVENTUR_TECHNIKER"] = techniker;
+            // Nur Systemmodule laden. Sonst steht der Dokumente-Ordner des Benutzers vorne im
+            // Modulpfad, und dort abgelegte Module koennten Befehle wie Get-CimInstance ersetzen.
+            psi.EnvironmentVariables["PSModulePath"] =
+                Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\Modules");
+            return psi;
+        }
+
         static string Quote(string s)
         {
-            // Regeln der Windows-Kommandozeile: Backslashes direkt vor einem " (auch dem
-            // schliessenden) verdoppeln, ein " selbst als \" schreiben.
+            // Fuer Pfade an explorer.exe. Regeln der Windows-Kommandozeile: Backslashes direkt
+            // vor einem " (auch dem schliessenden) verdoppeln, ein " selbst als \" schreiben.
             StringBuilder sb = new StringBuilder("\"");
             int backslashes = 0;
             foreach (char c in s)

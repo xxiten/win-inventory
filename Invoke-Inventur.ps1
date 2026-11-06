@@ -46,7 +46,12 @@ param(
 
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '0.9.1'
+$ScriptVersion = '0.9.2'
+
+# Eingaben nur aus Leerzeichen zählen als leer (z. B. aus Start-Inventur.cmd)
+$Kunde = "$Kunde".Trim()
+$Station = "$Station".Trim()
+$Techniker = "$Techniker".Trim()
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -67,8 +72,9 @@ function ConvertTo-MdCell {
     # Backslash nur vor Satzzeichen verdoppeln, sonst verschluckt Markdown ihn (\\server).
     # "DOMÄNE\Benutzer" bleibt so lesbar.
     $s = $s -replace '\\(?=[!-/:-@\[-`{-~])', '\\'
-    # Zeichen, die Tabellenspalten, Hervorhebung, Code oder HTML auslösen
-    return $s -replace '([|*_`<])', '\$1'
+    # Zeichen, die Tabellenspalten, Hervorhebung, Code, HTML, Links oder Bilder auslösen.
+    # Programmnamen u. ä. kann jeder Benutzer setzen; ohne [ ] ließen sich Links einschleusen.
+    return $s -replace '([|*_`<\[\]])', '\$1'
 }
 
 function Add-KeyValueTable {
@@ -163,6 +169,13 @@ $cs = Get-Cim Win32_ComputerSystem
 $os = Get-Cim Win32_OperatingSystem
 $bios = Get-Cim Win32_BIOS
 $csp = $null; try { $csp = Get-Cim Win32_ComputerSystemProduct } catch { }
+
+# Windows- und Office-Lizenzen stehen im selben Lizenzdienst. Die Abfrage dauert mehrere
+# Sekunden, daher einmal für beide Abschnitte; ein Fehler wird dort gemeldet.
+$lizenzen = $null; $lizenzFehler = $null
+try { $lizenzen = @(Get-Cim SoftwareLicensingProduct -Filter 'PartialProductKey IS NOT NULL') }
+catch { $lizenzFehler = $_.Exception.Message }
+$lizenzStatus = @{ 0 = 'Nicht lizenziert'; 1 = 'Aktiviert'; 2 = 'Kulanzzeit (OOB)'; 3 = 'Kulanzzeit (OOT)'; 4 = 'Nicht-Original-Kulanz'; 5 = 'Benachrichtigung'; 6 = 'Erweiterte Kulanz' }
 
 if (-not $OutputPath) { $OutputPath = $PSScriptRoot }
 if (-not $OutputPath) { $OutputPath = (Get-Location).Path }
@@ -402,26 +415,23 @@ Add-Line '## Netzwerk'
 Add-Line
 
 Invoke-Section 'Adapter' -Level 3 {
-    $statusText = @{ 'Up' = 'verbunden'; 'Disconnected' = 'getrennt'; 'Disabled' = 'deaktiviert'; 'Not Present' = 'nicht vorhanden' }
+    $adapterStatus = @{ 'Up' = 'verbunden'; 'Disconnected' = 'getrennt'; 'Disabled' = 'deaktiviert'; 'Not Present' = 'nicht vorhanden' }
     Add-Table @(Get-NetAdapter -ErrorAction Stop | Sort-Object Name) ([ordered]@{
         'Name'            = 'Name'
         'Beschreibung'    = 'InterfaceDescription'
-        'Status'          = { param($a) $s = "$($a.Status)"; if ($statusText.ContainsKey($s)) { $statusText[$s] } else { $s } }
+        'Status'          = { param($a) $s = "$($a.Status)"; if ($adapterStatus.ContainsKey($s)) { $adapterStatus[$s] } else { $s } }
         'MAC-Adresse'     = 'MacAddress'
         'Geschwindigkeit' = { param($a) if ("$($a.Status)" -eq 'Up') { $a.LinkSpeed } }
     })
 }
 
 Invoke-Section 'IP-Konfiguration' -Level 3 {
-    # Nur verbundene Adapter; DHCP steht nicht in Get-NetIPConfiguration, sondern am IP-Interface.
-    # Der Index ist dort UInt32, in Get-NetIPConfiguration Int32 - für die Hashtable angleichen.
-    $dhcp = @{}
-    Get-NetIPInterface -AddressFamily IPv4 -ErrorAction Stop | ForEach-Object { $dhcp[[int]$_.InterfaceIndex] = "$($_.Dhcp)" -eq 'Enabled' }
+    # Nur verbundene Adapter. Ein Adapter ohne IPv4 liefert $null statt einer leeren Liste.
     $configs = @(Get-NetIPConfiguration -ErrorAction Stop | Where-Object { "$($_.NetAdapter.Status)" -eq 'Up' } | Sort-Object InterfaceAlias)
     Add-Table $configs ([ordered]@{
         'Adapter'    = 'InterfaceAlias'
-        'IPv4'       = { param($c) ($c.IPv4Address | ForEach-Object { '{0}/{1}' -f $_.IPAddress, $_.PrefixLength }) -join ', ' }
-        'DHCP'       = { param($c) $dhcp[[int]$c.InterfaceIndex] }
+        'IPv4'       = { param($c) (@($c.IPv4Address) | Where-Object { $_ } | ForEach-Object { '{0}/{1}' -f $_.IPAddress, $_.PrefixLength }) -join ', ' }
+        'DHCP'       = { param($c) if ($c.NetIPv4Interface) { "$($c.NetIPv4Interface.Dhcp)" -eq 'Enabled' } }
         'Gateway'    = { param($c) ($c.IPv4DefaultGateway | ForEach-Object { $_.NextHop }) -join ', ' }
         'DNS-Server' = { param($c) ($c.DNSServer | Where-Object { $_.AddressFamily -eq 2 } | ForEach-Object { $_.ServerAddresses }) -join ', ' }
         'IPv6'       = { param($c) ($c.IPv6Address | Where-Object { $_.IPAddress -notlike 'fe80*' } | ForEach-Object { $_.IPAddress }) -join ', ' }
@@ -595,9 +605,9 @@ Invoke-Section 'Lokale Administratoren' -Level 3 {
 }
 
 Invoke-Section 'Windows-Lizenz' -Level 3 {
+    if ($lizenzFehler) { throw $lizenzFehler }
     $winAppId = '55c92734-d682-4d71-983e-d6ec3f16059f'
-    $lic = @(Get-Cim SoftwareLicensingProduct -Filter "ApplicationID='$winAppId' AND PartialProductKey IS NOT NULL")
-    $statusText = @{ 0 = 'Nicht lizenziert'; 1 = 'Aktiviert'; 2 = 'Kulanzzeit (OOB)'; 3 = 'Kulanzzeit (OOT)'; 4 = 'Nicht-Original-Kulanz'; 5 = 'Benachrichtigung'; 6 = 'Erweiterte Kulanz' }
+    $lic = @($lizenzen | Where-Object { $_.ApplicationID -eq $winAppId })
     foreach ($l in $lic) {
         $channel = 'unbekannt'
         if ($l.Description -match 'OEM') { $channel = 'OEM' }
@@ -607,7 +617,7 @@ Invoke-Section 'Windows-Lizenz' -Level 3 {
         Add-KeyValueTable ([ordered]@{
             'Edition'          = $l.Name
             'Lizenzkanal'      = $channel
-            'Status'           = $statusText[[int]$l.LicenseStatus]
+            'Status'           = $lizenzStatus[[int]$l.LicenseStatus]
             'Teil-Produktkey'  = 'XXXXX-XXXXX-XXXXX-XXXXX-' + $l.PartialProductKey
         })
     }
@@ -669,15 +679,20 @@ Invoke-Section 'Microsoft 365 / Office' -Level 3 {
     }
     # Dauerlizenzen (Office 2016-2024, Volumen/Retail) stehen im Windows-Lizenzdienst. Die
     # "Grace"-Einträge der Abos zeigen dort "Benachrichtigung", obwohl Office lizenziert ist.
+    if ($lizenzFehler) {
+        # Click-to-Run-Daten oben bleiben gültig; nur der Lizenzstatus fehlt
+        if (-not $found) { throw $lizenzFehler }
+        Add-Line ('_Lizenzstatus nicht abfragbar: {0}_' -f (ConvertTo-MdCell $lizenzFehler))
+        Add-Line
+        return
+    }
     $officeAppId = '0ff1ce15-a989-479d-af46-f275c6370663'
-    $statusText = @{ 0 = 'Nicht lizenziert'; 1 = 'Aktiviert'; 2 = 'Kulanzzeit (OOB)'; 3 = 'Kulanzzeit (OOT)'; 4 = 'Nicht-Original-Kulanz'; 5 = 'Benachrichtigung'; 6 = 'Erweiterte Kulanz' }
-    $lic = @(Get-Cim SoftwareLicensingProduct -Filter "ApplicationID='$officeAppId' AND PartialProductKey IS NOT NULL" |
-             Where-Object { $_.Name -notmatch 'O365' })
+    $lic = @($lizenzen | Where-Object { $_.ApplicationID -eq $officeAppId -and $_.Name -notmatch 'O365' })
     if ($lic.Count -gt 0) {
         $found = $true
         Add-Table $lic ([ordered]@{
             'Lizenz'          = 'Name'
-            'Status'          = { param($l) $statusText[[int]$l.LicenseStatus] }
+            'Status'          = { param($l) $lizenzStatus[[int]$l.LicenseStatus] }
             'Teil-Produktkey' = { param($l) 'XXXXX-XXXXX-XXXXX-XXXXX-' + $l.PartialProductKey }
         })
     }
