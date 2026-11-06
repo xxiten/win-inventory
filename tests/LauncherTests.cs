@@ -135,6 +135,8 @@ namespace WinInventory
             Check("Tag mit Zusatz wird verworfen", null, (string)Call("ParseLatestTag", "{\"tag_name\":\"v1.0.0-rc1\"}"));
             Check("Tag mit fremden Zeichen wird verworfen", null, (string)Call("ParseLatestTag", "{\"tag_name\":\"v1.0.0\\\" & calc\"}"));
             Check("Leere Antwort", null, (string)Call("ParseLatestTag", (object)null));
+            Check("Nicht-lateinische Ziffern werden verworfen", null,
+                  (string)Call("ParseLatestTag", "{\"tag_name\":\"v١.٢.٣\"}"));
             Version current = new Version(0, 9, 0, 0);
             Check("0.9.1 ist neuer als 0.9.0", "True", Call("IsNewer", "v0.9.1", current).ToString());
             Check("1.0.0 ist neuer als 0.9.0", "True", Call("IsNewer", "v1.0.0", current).ToString());

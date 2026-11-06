@@ -94,17 +94,20 @@ jobs:
           [IO.File]::WriteAllLines($notes, [string[]]$body, (New-Object Text.UTF8Encoding $false))
           # Ein veroeffentlichtes Release nie anfassen; entfernt werden nur Entwuerfe, die ein
           # abgebrochener Versuch hinterlassen hat.
+          # Es kann zu einem Tag Entwurf und Release gleichzeitig geben. Gibt es keins, ist $r $null,
+          # und $null wuerde als ein Eintrag durch die Pipeline laufen - daher der Null-Filter.
           function Get-Release { (gh release list --limit 100 --json tagName,isDraft | ConvertFrom-Json) | Where-Object { $_.tagName -eq $tag } }
+          function Test-Published($list) { @($list | Where-Object { $null -ne $_ -and -not $_.isDraft }).Count -gt 0 }
           $r = Get-Release
-          if ($r -and -not $r.isDraft) { throw "Release $tag existiert bereits." }
+          if (Test-Published $r) { throw "Release $tag existiert bereits." }
           # Die Releases-API antwortet gelegentlich mit HTTP 502; dann bis zu dreimal versuchen.
           for ($i = 1; $i -le 3; $i++) {
-            if ($r) { gh release delete $tag --yes }
+            foreach ($draft in $r) { gh release delete $tag --yes }
             gh release create $tag $exe.FullName --target $env:GITHUB_SHA --title $tag --notes-file $notes
             if ($LASTEXITCODE -eq 0) { break }
             Start-Sleep -Seconds 20
             $r = Get-Release
-            if ($r -and -not $r.isDraft) {
+            if (Test-Published $r) {
               # Trotz Fehlermeldung veroeffentlicht: sicherstellen, dass die Exe dranhaengt
               gh release upload $tag $exe.FullName --clobber
               if ($LASTEXITCODE -ne 0) { throw 'Exe konnte nicht hochgeladen werden.' }

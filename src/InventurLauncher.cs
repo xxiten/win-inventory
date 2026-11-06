@@ -159,7 +159,8 @@ namespace WinInventory
         static string ParseLatestTag(string json)
         {
             // Nur ein streng geformtes "vX.Y.Z" akzeptieren; daraus werden unten URLs gebaut.
-            Match m = Regex.Match(json ?? "", "\"tag_name\"\\s*:\\s*\"(v\\d{1,4}\\.\\d{1,4}\\.\\d{1,4})\"");
+            // [0-9] statt \d: \d trifft in .NET auch nicht-lateinische Ziffern
+            Match m = Regex.Match(json ?? "", "\"tag_name\"\\s*:\\s*\"(v[0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,4})\"");
             return m.Success ? m.Groups[1].Value : null;
         }
 
