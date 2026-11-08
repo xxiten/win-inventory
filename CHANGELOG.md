@@ -7,6 +7,17 @@ neuen Hauptversion oder, wenn nur etwas dazukommt, mit einer neuen Nebenversion.
 
 Der Release-Workflow übernimmt den Abschnitt der jeweiligen Version als Release-Notes.
 
+## [0.10.1] – 2026-11-08
+
+### Behoben
+- Unter Windows 10 kam der kritische Befund „keine Sicherheitsupdates mehr“ auch dann, wenn
+  der Lizenzdienst ausfiel und eine ESU-Lizenz deshalb nicht prüfbar war. Jetzt ist es in
+  diesem Fall eine Warnung.
+
+### Geändert
+- Die Prozessordaten werden nur noch einmal abgefragt, die Inventur ist dadurch etwa eine
+  Sekunde schneller.
+
 ## [0.10.0] – 2026-11-08
 
 ### Neu

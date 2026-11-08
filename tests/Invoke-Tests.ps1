@@ -118,9 +118,10 @@ finally { Remove-Item -LiteralPath $sb -Recurse -Force -ErrorAction SilentlyCont
 
 if ($ReportPath) {
     $lines = Get-Content -LiteralPath $ReportPath -Encoding UTF8
+    $r = Read-MdReport $ReportPath
     Assert-Equal 'Report beginnt mit "# Inventur"' $true ($lines[0] -like '# Inventur *')
     Assert-Equal 'Report-Kopf Spalten' '| Kunde | Station | Techniker | Erfasst am | Skriptversion |' $lines[2]
-    Assert-Equal 'Report-Kopf Version' $version (($lines[4] -split '\|')[5].Trim())
+    Assert-Equal 'Report-Kopf Version' $version $r.Werte['Skriptversion']
     $expected = @(
         '## Befunde', '## Übersicht'
         '## Hardware', '### Prozessor', '### Arbeitsspeicher', '### Mainboard & Firmware', '### Datenträger', '### Stabilität'
@@ -139,12 +140,12 @@ if ($ReportPath) {
         if ($lines[$i]) { $befunde += $lines[$i] }
     }
     $form = @($befunde | ForEach-Object { if ($_ -match '^- \*\*(Kritisch|Warnung):\*\* \S') { $Matches[1] } elseif ($_ -eq '_Keine Befunde._') { 'keine' } else { "FALSCH: $_" } })
-    $sortiert = @($form | Where-Object { $_ -eq 'Kritisch' }) + @($form | Where-Object { $_ -ne 'Kritisch' })
+    # Falsch geformte Zeilen fallen hier heraus und lassen den Vergleich scheitern
+    $sortiert = @($form -ceq 'Kritisch') + @($form -ceq 'Warnung') + @($form -ceq 'keine')
     Assert-Equal 'Report-Befunde Form und Reihenfolge' ($sortiert -join ', ') ($form -join ', ')
 
-    $r = Read-MdReport $ReportPath
     Assert-Equal 'Report lesbar für Sammelbericht' $env:COMPUTERNAME $r.Werte['Rechnername']
-    Assert-Equal 'Report Übersicht mit Prozessor und RAM' $true ([bool]$r.Werte['Prozessor'] -and [bool]$r.Werte['Arbeitsspeicher'])
+    Assert-Equal 'Report Übersicht mit Prozessor und RAM' $true ($r.Werte['Prozessor'] -and $r.Werte['Arbeitsspeicher'])
     Assert-Equal 'Report Befunde gelesen' $befunde.Count ($r.Befunde.Count + [int]($befunde -contains '_Keine Befunde._'))
 }
 

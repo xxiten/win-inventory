@@ -48,7 +48,7 @@ param(
 
 
 $ErrorActionPreference = 'Stop'
-$ScriptVersion = '0.10.0'
+$ScriptVersion = '0.10.1'
 
 # Eingaben nur aus Leerzeichen zählen als leer (z. B. aus Start-Inventur.cmd)
 $Kunde = "$Kunde".Trim()
@@ -61,16 +61,14 @@ $Techniker = "$Techniker".Trim()
 
 $script:md = New-Object System.Collections.Generic.List[string]
 $script:hinweise = New-Object System.Collections.Generic.List[string]
-$script:befunde = New-Object System.Collections.Generic.List[object]
+$script:befunde = [ordered]@{}   # Text -> Stufe
 
 function Add-Line { param([string]$Text = '') $script:md.Add($Text) }
 
 function Add-Befund {
     # Für den Abschnitt "Befunde" oben im Report. Text ohne Markdown, er wird dort entschärft.
     param([ValidateSet('Kritisch', 'Warnung')][string]$Stufe, [string]$Text)
-    if (-not ($script:befunde | Where-Object { $_.Text -eq $Text })) {
-        $script:befunde.Add([pscustomobject]@{ Stufe = $Stufe; Text = $Text })
-    }
+    if (-not $script:befunde.Contains($Text)) { $script:befunde[$Text] = $Stufe }
 }
 
 function ConvertTo-MdCell {
@@ -187,7 +185,7 @@ function Read-MdReport {
         }
         elseif ($abschnitt -eq 'Befunde' -and $l -like '- *') { $befunde.Add($l) }
     }
-    [pscustomobject]@{ Titel = $lines[0].Substring(11); Werte = $werte; Befunde = $befunde }
+    [pscustomobject]@{ Titel = $lines[0] -replace '^# Inventur '; Werte = $werte; Befunde = $befunde }
 }
 
 function Write-Sammelbericht {
@@ -203,33 +201,30 @@ function Write-Sammelbericht {
     if ($neueste.Count -lt 2) { return }
     $reports = @($neueste.Values | Sort-Object { $_.Werte['Station'] }, { $_.Werte['Rechnername'] })
     # Reports vor 0.10.0 haben keine Befunde: Anzahl dann leer statt 0
-    $anzahl = { param($r, $stufe) if ($null -ne $r.Befunde) { @(@($r.Befunde) -match ('^- \*\*{0}:' -f $stufe)).Count } }
-
-    $zeilen = New-Object System.Collections.Generic.List[string]
-    $zeilen.Add("# Sammelbericht $kundeMd")
-    $zeilen.Add('')
-    $zeilen.Add(('{0} Rechner, davon {1} mit kritischen Befunden und {2} ohne Upgrade-Möglichkeit auf Windows 11.' -f $reports.Count,
-        @($reports | Where-Object { (& $anzahl $_ 'Kritisch') -gt 0 }).Count,
-        @($reports | Where-Object { $_.Werte['Windows-11-Upgrade'] -like 'nicht möglich*' }).Count))
-    $zeilen.Add('')
-    $zeilen.Add('| Station | Rechner | Modell | Prozessor | RAM | Windows | Windows 11 | Kritisch | Warnungen | Erfasst am |')
-    $zeilen.Add('|---|---|---|---|---|---|---|---|---|---|')
-    foreach ($r in $reports) {
-        $w = $r.Werte
-        $modell = if ($w['Modellbezeichnung']) { $w['Modellbezeichnung'] } else { $w['Modell'] }
-        $win11 = if ($w['Betriebssystem'] -like '*Windows 11*') { 'installiert' } else { $w['Windows-11-Upgrade'] }
-        $zellen = @($w['Station'], $w['Rechnername'], "$($w['Hersteller']) $modell".Trim(), $w['Prozessor'], $w['Arbeitsspeicher'],
-            ("$($w['Betriebssystem']) $($w['Version'])" -replace '^Microsoft ', '').Trim(), $win11,
-            (& $anzahl $r 'Kritisch'), (& $anzahl $r 'Warnung'), $w['Erfasst am'])
-        $zeilen.Add('| ' + ($zellen -join ' | ') + ' |')
-    }
-    $zeilen.Add('')
+    $anzahl = { param($r, $stufe) if ($null -ne $r.Befunde) { ($r.Befunde -match ('^- \*\*{0}:' -f $stufe)).Count } }
     $mitBefunden = @($reports | Where-Object { $_.Befunde.Count -gt 0 })
-    if ($mitBefunden.Count -gt 0) {
-        $zeilen.Add('## Befunde')
-        $zeilen.Add('')
-        foreach ($r in $mitBefunden) { $zeilen.Add("### $($r.Titel)"); $zeilen.Add(''); $zeilen.AddRange($r.Befunde); $zeilen.Add('') }
-    }
+
+    $zeilen = [string[]]@(
+        "# Sammelbericht $kundeMd", ''
+        '{0} Rechner, davon {1} mit kritischen Befunden und {2} ohne Upgrade-Möglichkeit auf Windows 11.' -f $reports.Count,
+            @($reports | Where-Object { (& $anzahl $_ 'Kritisch') -gt 0 }).Count,
+            @($reports | Where-Object { $_.Werte['Windows-11-Upgrade'] -like 'nicht möglich*' }).Count
+        ''
+        '| Station | Rechner | Modell | Prozessor | RAM | Windows | Windows 11 | Kritisch | Warnungen | Erfasst am |'
+        '|---|---|---|---|---|---|---|---|---|---|'
+        foreach ($r in $reports) {
+            $w = $r.Werte
+            $modell = if ($w['Modellbezeichnung']) { $w['Modellbezeichnung'] } else { $w['Modell'] }
+            $win11 = if ($w['Betriebssystem'] -like '*Windows 11*') { 'installiert' } else { $w['Windows-11-Upgrade'] }
+            $zellen = @($w['Station'], $w['Rechnername'], "$($w['Hersteller']) $modell".Trim(), $w['Prozessor'], $w['Arbeitsspeicher'],
+                ("$($w['Betriebssystem']) $($w['Version'])" -replace '^Microsoft ', '').Trim(), $win11,
+                (& $anzahl $r 'Kritisch'), (& $anzahl $r 'Warnung'), $w['Erfasst am'])
+            '| ' + ($zellen -join ' | ') + ' |'
+        }
+        ''
+        if ($mitBefunden) { '## Befunde', '' }
+        foreach ($r in $mitBefunden) { "### $($r.Titel)", ''; $r.Befunde; '' }
+    )
     $pfad = Join-Path $Ordner ('Sammelbericht_{0}.md' -f ($Kunde -replace '[\x00-\x1f\\/:*?"<>|]', '_').TrimEnd('. '))
     [IO.File]::WriteAllLines($pfad, $zeilen, (New-Object System.Text.UTF8Encoding($false)))
     $pfad
@@ -251,6 +246,8 @@ $cs = Get-Cim Win32_ComputerSystem
 $os = Get-Cim Win32_OperatingSystem
 $bios = Get-Cim Win32_BIOS
 $csp = $null; try { $csp = Get-Cim Win32_ComputerSystemProduct } catch { }
+# Für Übersicht und Prozessor; die Abfrage dauert etwa eine Sekunde
+$cpus = $null; try { $cpus = @(Get-Cim Win32_Processor) } catch { }
 
 # Windows- und Office-Lizenzen stehen im selben Lizenzdienst. Die Abfrage dauert mehrere
 # Sekunden, daher einmal für beide Abschnitte; ein Fehler wird dort gemeldet.
@@ -312,7 +309,7 @@ Invoke-Section 'Übersicht' {
         1 { 'Desktop' } 2 { 'Notebook' } 3 { 'Workstation' } { $_ -in 4, 5, 7 } { 'Server' }
         6 { 'Appliance' } 8 { 'Tablet' } default { 'unbekannt' }
     }
-    $data['Prozessor']          = $(try { (@(Get-Cim Win32_Processor)[0]).Name.Trim() } catch { $null })
+    $data['Prozessor']          = $(if ($cpus) { $cpus[0].Name.Trim() })
     $data['Arbeitsspeicher']    = Format-Bytes $cs.TotalPhysicalMemory
     $data['Betriebssystem']     = $os.Caption
     $data['Version']            = $displayVersion
@@ -323,17 +320,18 @@ Invoke-Section 'Übersicht' {
         $ind = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\TargetVersionUpgradeExperienceIndicators' -ErrorAction SilentlyContinue |
             ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_.PSObject.Properties['UpgEx'] } |
             Sort-Object { [int64]$_.Timestamp } | Select-Object -Last 1
-        if ($ind -and $ind.UpgEx -in 'Green', 'Yellow') { $upgrade = 'möglich' }
-        elseif ($ind -and $ind.UpgEx -eq 'Red') {
-            $gruende = @(@($ind.RedReason) -split '[\s,;]+' | Where-Object { $_ -and $_ -ne 'None' } | ForEach-Object {
+        if ($ind.UpgEx -in 'Green', 'Yellow') { $upgrade = 'möglich' }
+        elseif ($ind.UpgEx -eq 'Red') {
+            $gruende = @($ind.RedReason -split '[\s,;]+' | Where-Object { $_ -and $_ -ne 'None' } | ForEach-Object {
                 switch -Regex ($_) { '^Cpu' { 'Prozessor' } '^Tpm' { 'TPM 2.0' } 'SecureBoot|Uefi' { 'Secure Boot' }
                                      'Memory' { 'Arbeitsspeicher' } 'SystemDrive' { 'Speicherplatz' } default { $_ } }
             } | Select-Object -Unique)
-            $upgrade = 'nicht möglich'
+            $upgrade = 'nicht möglich'   # Write-Sammelbericht zählt Werte, die so beginnen
             if ($gruende) { $upgrade += ' ({0})' -f ($gruende -join ', ') }
         }
         $data['Windows-11-Upgrade'] = $upgrade
-        if (@($lizenzen | Where-Object { $_.Name -match '\bESU\b' -and $_.LicenseStatus -eq 1 }).Count -gt 0) {
+        # Ist der Lizenzdienst ausgefallen, bleibt ESU offen: dann nur Warnung
+        if ($lizenzFehler -or ($lizenzen | Where-Object { $_.Name -match '\bESU\b' -and $_.LicenseStatus -eq 1 })) {
             Add-Befund 'Warnung' "Windows 10 bekommt nur noch über ESU Sicherheitsupdates. Upgrade auf Windows 11: $upgrade."
         } else {
             Add-Befund 'Kritisch' "Windows 10 bekommt seit 14.10.2025 keine Sicherheitsupdates mehr. Upgrade auf Windows 11: $upgrade."
@@ -359,7 +357,8 @@ Add-Line '## Hardware'
 Add-Line
 
 Invoke-Section 'Prozessor' -Level 3 {
-    Add-Table (Get-Cim Win32_Processor) ([ordered]@{
+    # Schlug die Abfrage oben fehl, erneut, damit der Grund im Report steht
+    Add-Table $(if ($cpus) { $cpus } else { Get-Cim Win32_Processor }) ([ordered]@{
         'Modell'    = { param($p) $p.Name.Trim() }
         'Kerne'     = 'NumberOfCores'
         'Threads'   = 'NumberOfLogicalProcessors'
@@ -633,16 +632,14 @@ Invoke-Section 'BitLocker' -Level 3 {
             'Methode'        = 'EncryptionMethod'
             'Schutzmethoden' = { param($v) (@($v.KeyProtector | ForEach-Object { $_.KeyProtectorType }) -join ', ') }
         })
-        $sys = $vols | Where-Object { $_.MountPoint -eq $env:SystemDrive } | Select-Object -First 1
-        $sysAus = $sys -and "$($sys.ProtectionStatus)" -ne 'On'
+        $sysAus = $vols | Where-Object { $_.MountPoint -eq $env:SystemDrive -and "$($_.ProtectionStatus)" -ne 'On' }
     } else {
         $ev = @(Get-Cim Win32_EncryptableVolume -Namespace 'root\cimv2\Security\MicrosoftVolumeEncryption')
         Add-Table $ev ([ordered]@{
             'Laufwerk' = 'DriveLetter'
             'Schutz'   = { param($v) switch ($v.ProtectionStatus) { 0 { 'Aus' } 1 { 'Ein' } default { 'unbekannt' } } }
         })
-        $sys = $ev | Where-Object { $_.DriveLetter -eq $env:SystemDrive } | Select-Object -First 1
-        $sysAus = $sys -and $sys.ProtectionStatus -eq 0
+        $sysAus = $ev | Where-Object { $_.DriveLetter -eq $env:SystemDrive -and $_.ProtectionStatus -eq 0 }
     }
     if ($sysAus) {
         if ($cs.PCSystemTypeEx -in 2, 8) { Add-Befund 'Kritisch' "Mobiles Gerät ohne Verschlüsselung: BitLocker ist auf $env:SystemDrive aus." }
@@ -936,23 +933,23 @@ if (-not $NoStoreApps) {
 # Hinweise und Befunde unter den Kopf, schreiben, Sammelbericht
 # ---------------------------------------------------------------------------
 
-$block = New-Object System.Collections.Generic.List[string]
-foreach ($h in $script:hinweise) { $block.Add("> **Hinweis:** $h") }
-if ($script:hinweise.Count -gt 0) { $block.Add('') }
-$block.Add('## Befunde')
-$block.Add('')
-foreach ($stufe in 'Kritisch', 'Warnung') {
-    foreach ($b in $script:befunde) { if ($b.Stufe -eq $stufe) { $block.Add(('- **{0}:** {1}' -f $stufe, (ConvertTo-MdCell $b.Text))) } }
-}
-if ($script:befunde.Count -eq 0) { $block.Add('_Keine Befunde._') }
-$block.Add('')
+$block = [string[]]@(
+    foreach ($h in $script:hinweise) { "> **Hinweis:** $h" }
+    if ($script:hinweise.Count) { '' }
+    '## Befunde', ''
+    foreach ($stufe in 'Kritisch', 'Warnung') {
+        foreach ($t in $script:befunde.Keys) { if ($script:befunde[$t] -eq $stufe) { '- **{0}:** {1}' -f $stufe, (ConvertTo-MdCell $t) } }
+    }
+    if (-not $script:befunde.Count) { '_Keine Befunde._' }
+    ''
+)
 $script:md.InsertRange($headerIndex, $block)
 
 $dir = Split-Path -Parent $OutputPath
 if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 [System.IO.File]::WriteAllLines($OutputPath, $script:md, (New-Object System.Text.UTF8Encoding($false)))
 
-$kritisch = @($script:befunde | Where-Object { $_.Stufe -eq 'Kritisch' }).Count
+$kritisch = @($script:befunde.Values -eq 'Kritisch').Count
 Write-Host ''
 Write-Host ('Befunde: {0} kritisch, {1} Warnung(en)' -f $kritisch, ($script:befunde.Count - $kritisch))
 Write-Host "Report geschrieben: $OutputPath" -ForegroundColor Green
