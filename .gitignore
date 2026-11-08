@@ -2,6 +2,7 @@
 Inventur_*.md
 Inventur_*.html
 Inventur_*.pdf
+Sammelbericht_*.md
 
 # Build-Ausgabe
 dist/

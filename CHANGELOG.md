@@ -7,6 +7,31 @@ neuen Hauptversion oder, wenn nur etwas dazukommt, mit einer neuen Nebenversion.
 
 Der Release-Workflow übernimmt den Abschnitt der jeweiligen Version als Release-Notes.
 
+## [0.10.0] – 2026-11-08
+
+### Neu
+- **Befunde** ganz oben im Report: was der Techniker angehen sollte, getrennt nach Kritisch
+  und Warnung.
+  - Kritisch: Windows 10 ohne ESU, samt Windows' eigener Bewertung, ob ein Upgrade auf
+    Windows 11 möglich ist und woran es scheitert; Office 2016, 2019 oder 2021; kein aktiver
+    Virenschutz; Datenträger mit Fehlerzustand; Notebook oder Tablet ohne BitLocker.
+  - Warnung: BitLocker auf dem Systemlaufwerk eines Desktops aus, veraltete Virensignaturen,
+    Firewall-Profil aus, letztes Update älter als 45 Tage, Gastkonto aktiv, Laufwerk unter
+    10 % frei, Akku unter 60 % Kapazität, Bluescreens oder Datenträgerfehler in den letzten
+    30 Tagen, ab drei unerwarteten Abschaltungen.
+- **Stabilität** unter Hardware: Bluescreens, unerwartete Abschaltungen und Datenträgerfehler
+  der letzten 30 Tage aus dem Ereignisprotokoll.
+- **Sammelbericht:** Liegen im Zielordner Reports von mindestens zwei Rechnern desselben
+  Kunden, entsteht dort `Sammelbericht_<Kunde>.md` mit einer Zeile je Rechner (Modell, CPU,
+  RAM, Windows, Windows 11, Anzahl der Befunde) und den Befunden aller Rechner. Er wird bei
+  jeder Inventur neu geschrieben; je Rechner zählt der neueste Report.
+
+### Geändert
+- Die Übersicht enthält jetzt auch Prozessor und Arbeitsspeicher, unter Windows 10 zusätzlich
+  die Zeile „Windows-11-Upgrade“.
+- Gliederung: neue Abschnitte „Befunde“ (vor der Übersicht) und „Stabilität“ (nach
+  Datenträger).
+
 ## [0.9.2] – 2026-11-06
 
 ### Behoben

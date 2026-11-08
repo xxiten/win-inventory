@@ -21,6 +21,16 @@ Benutzer, Lizenz und installierte Software und schreibt alles in einen sauberen 
 Standard-Zielordner ist der Ordner der Exe, also z. B. der USB-Stick. Ist der schreibgeschützt,
 wird der Desktop vorgeschlagen. Der Dateiname ist `Inventur_<RECHNER>_<Datum>.md`.
 
+Ganz oben im Report stehen die **Befunde**: was der Techniker angehen sollte, etwa Windows 10
+ohne Updates (mit der Angabe, ob Windows 11 möglich ist), ein Notebook ohne BitLocker, fehlender
+Virenschutz, eine volle Platte oder Bluescreens.
+
+**Mehrere Rechner eines Kunden:** Mit dem USB-Stick von PC zu PC gehen und überall denselben
+Kunden eintragen. Ab dem zweiten Rechner liegt auf dem Stick zusätzlich
+`Sammelbericht_<Kunde>.md`: eine Tabelle aller Rechner mit Modell, CPU, RAM, Windows,
+Windows-11-Tauglichkeit und Anzahl der Befunde, darunter die Befunde je Rechner. Er wird bei
+jeder Inventur neu geschrieben, je Rechner zählt der neueste Report.
+
 Gibt es eine neuere Version, zeigt die Exe oben einen gelben Hinweis. *Herunterladen* lädt die
 neue `Inventur.exe` über den Browser, *Was ist neu?* öffnet die Release-Notes. Ohne Internet
 erscheint einfach kein Hinweis.
@@ -50,8 +60,9 @@ fragt im Konsolenfenster nach Kunde und Station.
 
 | Abschnitt | Inhalt |
 |---|---|
-| Übersicht | Hersteller, Modell, Seriennummer, UUID, Gerätetyp, Windows-Edition, -Version und -Build, Installationsdatum, Laufzeit, angemeldeter Benutzer |
-| Hardware | CPU, RAM (Module, belegte Slots, max. Ausbau), Mainboard, BIOS/UEFI, physische Datenträger (Typ, Bus, Zustand, Seriennummer), Laufwerke mit Füllstand |
+| Befunde | Kritisch: Windows 10 ohne ESU (mit Windows-11-Tauglichkeit), Office 2016/2019/2021, kein aktiver Virenschutz, defekter Datenträger, Notebook ohne BitLocker. Warnung: BitLocker aus, alte Signaturen, Firewall aus, Update älter als 45 Tage, Gastkonto, Laufwerk unter 10 % frei, Akku unter 60 %, Bluescreens, Datenträgerfehler, gehäufte Abschaltungen |
+| Übersicht | Hersteller, Modell, Seriennummer, UUID, Gerätetyp, CPU, RAM, Windows-Edition, -Version und -Build, unter Windows 10 die Windows-11-Tauglichkeit, Installationsdatum, Laufzeit, angemeldeter Benutzer |
+| Hardware | CPU, RAM (Module, belegte Slots, max. Ausbau), Mainboard, BIOS/UEFI, physische Datenträger (Typ, Bus, Zustand, Seriennummer), Laufwerke mit Füllstand, Stabilität (Bluescreens, unerwartete Abschaltungen, Datenträgerfehler der letzten 30 Tage) |
 | Peripherie & Grafik | Grafikkarten (Speicher, Treiber, Auflösung), Monitore (Hersteller, Modell, Seriennummer, Baujahr), Drucker, Akku-Gesundheit |
 | Netzwerk | Adapter (Status, MAC-Adresse, Geschwindigkeit), IP-Konfiguration der verbundenen Adapter (IPv4, DHCP, Gateway, DNS-Server, IPv6) |
 | Sicherheit | TPM, Secure Boot, VBS/Credential Guard, BitLocker je Laufwerk, Virenschutz und Defender-Details, Firewall-Profile, letzte Updates, ausstehender Neustart |
@@ -72,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File .\Invoke-Inventur.ps1 -Kunde "Muster Gm
 
 | Parameter | Bedeutung |
 |---|---|
-| `-Kunde "Name"` | Kundenname im Report-Kopf |
+| `-Kunde "Name"` | Kundenname im Report-Kopf; Grundlage für den Sammelbericht im Zielordner |
 | `-Station "Name"` | Sprechender Name des Arbeitsplatzes, z. B. „PC Sonja“; steht in der Überschrift vor dem Rechnernamen |
 | `-Techniker "Name"` | Name des Technikers im Report-Kopf |
 | `-OutputPath <Datei oder Ordner>` | Ziel des Reports (Standard: Ordner des Skripts) |
@@ -114,7 +125,7 @@ Den Rest erledigt GitHub Actions (`.github/workflows/build.yml`):
 
 Der Report enthält Seriennummern, Benutzernamen und den Entra-Mandanten. Er ist wie andere
 Kundendokumentation zu behandeln. Produktschlüssel werden standardmäßig maskiert, und
-erzeugte Reports (`Inventur_*`) sind per `.gitignore` vom Repo ausgeschlossen.
+erzeugte Reports (`Inventur_*`, `Sammelbericht_*`) sind per `.gitignore` vom Repo ausgeschlossen.
 
 Das Tool überträgt keine Inventurdaten. Die einzige Netzwerkverbindung ist die Versionsabfrage
 der Exe beim Start: ein Abruf der Release-Liste bei GitHub, wie ein Browseraufruf. GitHub sieht
