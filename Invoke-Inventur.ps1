@@ -662,7 +662,8 @@ Invoke-Section 'Virenschutz' -Level 3 {
             'Signaturen'  = { param($a) if (& $avAktuell $a) { 'aktuell' } else { 'veraltet' } }
         }) -Empty '_Kein Virenschutz im Sicherheitscenter registriert._'
         $aktiv = @($av | Where-Object { & $avAktiv $_ })
-        if ($aktiv.Count -eq 0) { Add-Befund 'Kritisch' 'Kein aktiver Virenschutz.' }
+        # Windows Server trägt keinen Virenschutz ins Sicherheitscenter ein, eine leere Liste sagt dort nichts
+        if ($aktiv.Count -eq 0) { if ($os.ProductType -eq 1) { Add-Befund 'Kritisch' 'Kein aktiver Virenschutz.' } }
         elseif (-not ($aktiv | Where-Object { & $avAktuell $_ })) { Add-Befund 'Warnung' 'Die Virensignaturen sind veraltet.' }
     } catch { Add-Line '_Sicherheitscenter nicht abfragbar._'; Add-Line }
 
